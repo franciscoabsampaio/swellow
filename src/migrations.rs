@@ -21,12 +21,12 @@ pub struct Resource {
 }
 
 /// Extract version ID from folder name: "001_create_users" -> 1
-fn extract_version_id(version_name: &str) -> Result<i32, String> {
+fn extract_version_id(version_name: &str) -> Result<i64, String> {
     version_name
         .split('_')
         .next()
         .ok_or_else(|| format!("Invalid version format: '{}'", version_name))?
-        .parse::<i32>()
+        .parse::<i64>()
         .map_err(|_| format!("Version ID is not a number: '{}'", version_name))
 }
 
@@ -85,8 +85,8 @@ fn parse_sql_file(file_path: &Path) -> Result<Vec<Resource>, String> {
 /// Scan a migration version directory for SQL files and return all resources
 fn gather_resources_from_migration_dir_with_id(
     version_path: PathBuf,
-    version_id: i32,
-) -> Result<(i32, Vec<Resource>), String> {
+    version_id: i64,
+) -> Result<(i64, Vec<Resource>), String> {
     let mut all_resources = Vec::new();
 
     for entry in fs::read_dir(&version_path)
@@ -110,9 +110,9 @@ fn gather_resources_from_migration_dir_with_id(
 /// then parsing only the filtered set. Returns results sorted by version_id.
 pub fn load_in_interval(
     base_dir: &str,
-    from_version_id: i32,
-    to_version_id: i32,
-) -> Result<Vec<(i32, Vec<Resource>)>, String> {
+    from_version_id: i64,
+    to_version_id: i64,
+) -> Result<Vec<(i64, Vec<Resource>)>, String> {
     if from_version_id > to_version_id {
         return Err(format!(
             "Invalid version interval: from_version_id ({}) > to_version_id ({})",
@@ -129,7 +129,7 @@ pub fn load_in_interval(
     }
 
     // 1) Collect (version_name, version_id) for all subdirs
-    let mut versions: Vec<(String, i32)> = Vec::new();
+    let mut versions: Vec<(String, i64)> = Vec::new();
     for entry in fs::read_dir(path)
         .map_err(|e| format!("Failed to read directory '{}': {}", base_dir, e))?
     {
@@ -151,7 +151,7 @@ pub fn load_in_interval(
     }
 
     // 2) Enforce global uniqueness across ALL subdirs (not just filtered)
-    let mut first_by_id: HashMap<i32, String> = HashMap::new();
+    let mut first_by_id: HashMap<i64, String> = HashMap::new();
     for (name, id) in &versions {
         if let Some(first) = first_by_id.insert(*id, name.clone()) {
             return Err(format!(
@@ -175,7 +175,7 @@ pub fn load_in_interval(
     versions.sort_by_key(|(_, id)| *id);
 
     // 5) Parse only the filtered set
-    let mut migrations: Vec<(i32, Vec<Resource>)> = Vec::new();
+    let mut migrations: Vec<(i64, Vec<Resource>)> = Vec::new();
     for (version_name, version_id) in versions {
         let pair = gather_resources_from_migration_dir_with_id(
             Path::new(base_dir).join(version_name),

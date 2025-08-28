@@ -15,14 +15,14 @@ pub async fn peck(db_connection_string: &String) -> sqlx::Result<Pool<Postgres>>
 pub async fn plan(
     db_connection_string: &String,
     migration_directory: &String,
-    max_version_id: i32
+    max_version_id: i64
 ) -> sqlx::Result<Vec<db::Record>> {
     let pool: Pool<Postgres> = peck(db_connection_string).await?;
     let tx = pool.begin().await?;
     let records = db::begin(tx).await?;
 
     // Get the latest migration version.
-    let from_version_id: i32 = match {
+    let from_version_id: i64 = match {
         records
             .iter()
             .map(|m| m.migration_version_id)

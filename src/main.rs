@@ -37,9 +37,9 @@ enum Commands {
     Plan {
         #[arg(
             long,
-            help = "Migrate up to this maximum version ID.",
+            help = "Migrate up to the specified version ID.\nLargest value possible: 64 bits.",
         )]
-        max_version_id: i32
+        version_id: Option<i64>
     }
 }
 
@@ -54,12 +54,16 @@ async fn main() -> sqlx::Result<()> {
         Commands::Peck { } => {
             commands::peck(db_connection_string).await?;
         }
-        Commands::Plan { max_version_id } => {
+        Commands::Plan { version_id } => {
+            // If no version is specified, set the largest possible number.
+            let version_id = version_id.unwrap_or(i64::MAX);
+
             let records = commands::plan(
                 db_connection_string,
                 migration_directory,
-                max_version_id
+                version_id
             ).await?;
+
             println!("{:#?}", records)
         }
     }

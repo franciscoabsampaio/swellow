@@ -3,7 +3,7 @@ use sqlx::{FromRow, Pool, Postgres, Transaction};
 #[derive(Debug, FromRow)]
 pub struct Record {
     pub oid: i32,
-    pub migration_version_id: i32,
+    pub migration_version_id: i64,
     pub migration_version_name: String,
     pub object_name_after: String,
 }
@@ -15,7 +15,7 @@ pub async fn ensure_table(pool: &Pool<Postgres>) -> sqlx::Result<()> {
             oid OID NOT NULL,
             object_name_before TEXT NOT NULL,
             object_name_after TEXT,
-            migration_version_id INTEGER NOT NULL,
+            migration_version_id BIGINT NOT NULL,
             migration_version_name TEXT NOT NULL,
             status TEXT NOT NULL,
             checksum INTEGER NOT NULL,
