@@ -1,4 +1,3 @@
-use anyhow::Result;
 use sqlx::{FromRow, Pool, Postgres, Transaction};
 
 #[derive(Debug, FromRow)]
@@ -9,7 +8,7 @@ pub struct Record {
     pub object_name_after: String,
 }
 
-pub async fn ensure_table(pool: &Pool<Postgres>) -> Result<()> {
+pub async fn ensure_table(pool: &Pool<Postgres>) -> sqlx::Result<()> {
     sqlx::query(r#"
         CREATE TABLE IF NOT EXISTS swellow_records (
             id SERIAL PRIMARY KEY,
@@ -30,7 +29,7 @@ pub async fn ensure_table(pool: &Pool<Postgres>) -> Result<()> {
     Ok(())
 }
 
-pub async fn begin(mut tx: Transaction<'static, Postgres>) -> Result<Vec<Record>> {
+pub async fn begin(mut tx: Transaction<'static, Postgres>) -> sqlx::Result<Vec<Record>> {
     // Acquire a lock on the swellow_records table
     // To ensure no other migration process is underway.
     sqlx::query("LOCK TABLE swellow_records IN ACCESS EXCLUSIVE MODE")

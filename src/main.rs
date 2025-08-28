@@ -1,10 +1,10 @@
 // Project
 mod commands;
 mod db;
+mod migrations;
 // Dependencies
-use anyhow::{Result};
 use clap::{Parser, Subcommand};
-use sqlx::{Pool, Postgres, PgPool};
+use sqlx;
 
 
 #[derive(Parser)]
@@ -34,11 +34,17 @@ struct Cli {
 enum Commands {
     /// Test connection to DB.
     Peck {},
-    Plan {}
+    Plan {
+        #[arg(
+            long,
+            help = "Migrate up to this maximum version ID.",
+        )]
+        max_version_id: i32
+    }
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> sqlx::Result<()> {
     let args: Cli = Cli::parse();
 
     let db_connection_string: &String = &args.db_connection_string;
@@ -48,8 +54,12 @@ async fn main() -> Result<()> {
         Commands::Peck { } => {
             commands::peck(db_connection_string).await?;
         }
-        Commands::Plan { } => {
-            let records = commands::plan(db_connection_string).await?;
+        Commands::Plan { max_version_id } => {
+            let records = commands::plan(
+                db_connection_string,
+                migration_directory,
+                max_version_id
+            ).await?;
             println!("{:#?}", records)
         }
     }
