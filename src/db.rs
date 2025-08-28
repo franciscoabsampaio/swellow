@@ -3,9 +3,9 @@ use sqlx::{FromRow, Pool, Postgres, Transaction};
 
 #[derive(Debug, FromRow)]
 pub struct Record {
-    pub oid: i32,  // OID in Postgres is int4
-    pub version_id: i32,
-    pub version: String,
+    pub oid: i32,
+    pub migration_version_id: i32,
+    pub migration_version_name: String,
     pub object_name_after: String,
 }
 
@@ -16,8 +16,8 @@ pub async fn ensure_table(pool: &Pool<Postgres>) -> Result<()> {
             oid OID NOT NULL,
             object_name_before TEXT NOT NULL,
             object_name_after TEXT,
-            migration_version TEXT NOT NULL,
             migration_version_id INTEGER NOT NULL,
+            migration_version_name TEXT NOT NULL,
             status TEXT NOT NULL,
             checksum INTEGER NOT NULL,
             dtm_created_at TIMESTAMP DEFAULT now(),
@@ -37,11 +37,12 @@ pub async fn begin(mut tx: Transaction<'static, Postgres>) -> Result<Vec<Record>
         .execute(&mut *tx)
         .await?;
 
+    // Get the latest migrations for each object.
     let rows: Vec<Record> = sqlx::query_as::<_, Record>("
     SELECT
-        last.oid,
+        last.oid::int AS oid,  -- Cast to int for compatibility with Rust
         last.migration_version_id,
-        b.migration_version,
+        b.migration_version_name,
         b.object_name_after
     FROM (
         SELECT
