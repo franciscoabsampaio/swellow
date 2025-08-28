@@ -7,7 +7,21 @@
 ### Migration Table
 
 - Create table `swellow` if not exist.
-- Schema: `id`, `target_table_id` (e.g. `products`), `migration_version`, `status` (e.g. `READY`, `EXECUTED`, `TESTED`, `ROLLED_BACK`), `checksum`, `dtm_created_at`, `dtm_updated_at`.
+- Schema:
+
+```sql
+id INTEGER,
+oid INTEGER,  -- Object ID, e.g. products
+object_name_before VARCHAR(n),  -- Object name before 
+object_name_after VARCHAR(n),
+version VARCHAR(n),  -- 20251406_00_create_records
+version_id INTEGER,  -- 2025140600
+status VARCHAR(n),  -- E.g. READY, EXECUTED, TESTED, ROLLED_BACK
+checksum INTEGER,
+dtm_created_at TIMESTAMP,
+dtm_updated_at TIMESTAMP
+```
+
 - `checksum` column to detect if someone modified a migration since the last step.
 
 ### Directory of Migrations

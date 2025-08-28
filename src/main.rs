@@ -1,30 +1,30 @@
-// src/main.rs
+// Project
+mod commands;
+mod db;
+// Dependencies
 use anyhow::{Result};
 use clap::{Parser, Subcommand};
 use sqlx::{Pool, Postgres, PgPool};
 
+
 #[derive(Parser)]
 #[command(name = "swellow", version, about = "Database migration tool in Rust.")]
 struct Cli {
-    /// Database connection URL (e.g., postgres://user:pass@localhost/db)
     #[arg(
-        short,
-        long,
-        help = "Database connection string",
+        long = "db",
+        help = "Database connection string. Please follow the following format:
+    postgresql://<username>:<password>@<host>:<port>/<database>\n",
         env = "DB_CONNECTION_STRING",
         hide_env_values = true
     )]
     db_connection_string: String,
 
-    /// Directory containing all migrations.
     #[arg(
-        short,
-        long,
-        help = "Database connection string",
-        env = "DB_CONNECTION_STRING",
-        hide_env_values = true
+        long = "dir",
+        help = "Directory containing all migrations",
+        env = "MIGRATION_DIRECTORY",
     )]
-    db_connection_string: String,
+    migration_directory: String,
 
     #[command(subcommand)]
     command: Commands,
@@ -33,7 +33,8 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Test connection to DB.
-    Peck {}
+    Peck {},
+    Plan {}
 }
 
 #[tokio::main]
@@ -41,11 +42,15 @@ async fn main() -> Result<()> {
     let args: Cli = Cli::parse();
 
     let db_connection_string: &String = &args.db_connection_string;
+    let migration_directory: &String = &args.migration_directory;
 
     match args.command {
         Commands::Peck { } => {
-            println!("Pecking database...");
-            let _: Pool<Postgres> = PgPool::connect(&db_connection_string).await?;
+            commands::peck(db_connection_string).await?;
+        }
+        Commands::Plan { } => {
+            let records = commands::plan(db_connection_string).await?;
+            println!("{:#?}", records)
         }
     }
 
