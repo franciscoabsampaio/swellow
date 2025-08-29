@@ -24,7 +24,7 @@ pub fn setup_logging(verbose: u8, quiet: bool) {
 pub fn show_migration_changes(
     migrations: Vec<(i64, PathBuf, Vec<Resource>)>
 ) -> () {
-    let mut output = "\nThe following migrations will be applied:\n".to_string();
+    let mut output = "\n--- Migration plan ---\n\nThe following migrations will be applied:\n".to_string();
 
     for (version_id, version_path, resources) in migrations {
         // writeln! appends to the String
@@ -47,5 +47,5 @@ pub fn show_migration_changes(
         }
     }
 
-    tracing::info!("{}", output);
+    tracing::info!("{}\n--- End of migration plan ---", output);
 }
