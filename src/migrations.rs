@@ -6,6 +6,8 @@ use sqlparser::ast::{ObjectName, Statement};
 use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::Parser;
 
+use crate::MigrationDirection;
+
 #[derive(Debug)]
 pub enum ResourceType {
     Table,
@@ -86,30 +88,23 @@ fn parse_sql_file(file_path: &Path) -> Result<Vec<Resource>, String> {
     Ok(resources)
 }
 
-
-/// Scan a migration version directory for SQL files and return all resources
+/// Scan a migration version directory for a specific SQL file and return resources
 fn gather_resources_from_migration_dir_with_id(
     version_path: PathBuf,
     version_id: i64,
+    file_name: &str, // e.g. "up.sql" or "down.sql"
 ) -> Result<(i64, PathBuf, Vec<Resource>), String> {
-    let mut all_resources = Vec::new();
+    let target_file = version_path.join(format!("{}.sql",file_name));
 
-    for entry in fs::read_dir(&version_path)
-        .map_err(|e| format!("Failed to read directory {:?}: {}", version_path, e))?
-    {
-        let path = entry.map_err(|e| format!("Failed to read entry: {}", e))?.path();
-
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "sql") {
-            all_resources.extend(parse_sql_file(&path)?);
-        }
+    if !target_file.exists() {
+        return Ok((version_id, version_path, vec!()))
     }
 
-    if all_resources.is_empty() {
-        return Err(format!("No SQL files found in migration directory: {:?}", version_path));
-    }
+    let resources = parse_sql_file(&target_file)?;
 
-    Ok((version_id, version_path, all_resources))
+    Ok((version_id, version_path, resources))
 }
+
 
 /// Load migrations within [from_version_id, to_version_id], checking global uniqueness first,
 /// then parsing only the filtered set. Returns results sorted by version_id.
@@ -117,6 +112,7 @@ pub fn load_in_interval(
     base_dir: &str,
     from_version_id: i64,
     to_version_id: i64,
+    file_name: &str, // e.g. "up.sql" or "down.sql"
 ) -> Result<Vec<(i64, PathBuf, Vec<Resource>)>, String> {
     if from_version_id > to_version_id {
         return Err(format!(
@@ -167,7 +163,7 @@ pub fn load_in_interval(
     }
 
     // 3) Filter to the requested interval (inclusive)
-    versions.retain(|(_, id)| *id > from_version_id && *id <= to_version_id);
+    versions.retain(|(_, id)| *id >= from_version_id && *id <= to_version_id);
 
     if versions.is_empty() {
         return Err(format!(
@@ -184,7 +180,8 @@ pub fn load_in_interval(
     for (version_name, version_id) in versions {
         let tuple = gather_resources_from_migration_dir_with_id(
             Path::new(base_dir).join(version_name),
-            version_id
+            version_id,
+            file_name, // <-- caller decides
         )?;
         migrations.push(tuple);
     }

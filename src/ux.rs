@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::fmt::Write;
 
 use crate::migrations::Resource;
+use crate::MigrationDirection;
 
 pub fn setup_logging(verbose: u8, quiet: bool) {
     let level = if quiet {
@@ -22,19 +23,28 @@ pub fn setup_logging(verbose: u8, quiet: bool) {
 
 
 pub fn show_migration_changes(
-    migrations: Vec<(i64, PathBuf, Vec<Resource>)>
+    migrations: &Vec<(i64, PathBuf, Vec<Resource>)>,
+    direction: &MigrationDirection
 ) -> () {
-    let mut output = "\n--- Migration plan ---\n\nThe following migrations will be applied:\n".to_string();
+    let operation = match direction {
+        MigrationDirection::Up => "Migration",
+        MigrationDirection::Down => "Rollback"
+    };
+
+    let mut output = "Generating migration plan...\n--- Migration plan ---\n".to_string();
 
     for (version_id, version_path, resources) in migrations {
         // writeln! appends to the String
         writeln!(
             &mut output,
-            "\nMigration {}: '{}' -> {} change(s)",
+            "\n{} {}: '{}' -> {} change(s)",
+            operation,
             version_id,
             version_path.display(),
             resources.len(),
         ).unwrap();
+
+        let mut destructive_found = false;
 
         for Resource { name, object_type, statement } in resources {
             writeln!(
@@ -43,6 +53,21 @@ pub fn show_migration_changes(
                 statement,
                 object_type,
                 name,
+            ).unwrap();
+
+            // Check for destructive statements
+            if statement.trim_start().to_uppercase().starts_with("DROP") {
+                destructive_found = true;
+            }
+        }
+
+        if destructive_found {
+            tracing::warn!("{} {} contains destructive actions!", operation, version_id);
+            writeln!(
+                &mut output,
+                "\n\tWARNING: {} {} contains destructive actions!",
+                operation,
+                version_id
             ).unwrap();
         }
     }

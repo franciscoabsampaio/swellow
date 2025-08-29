@@ -31,7 +31,7 @@ pub async fn ensure_table(pool: &Pool<Postgres>) -> sqlx::Result<()> {
 
 pub async fn begin(
     mut tx: Transaction<'static, Postgres>
-) -> sqlx::Result<Vec<Record>> {
+) -> sqlx::Result<(Transaction<'static, Postgres>, Vec<Record>)> {
     tracing::info!("Acquiring lock on records table...");
     // Acquire a lock on the swellow_records table
     // To ensure no other migration process is underway.
@@ -62,5 +62,5 @@ pub async fn begin(
         .fetch_all(&mut *tx)
         .await?;
 
-    return Ok(rows)
+    return Ok((tx, rows))
 }

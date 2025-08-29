@@ -47,17 +47,45 @@ struct Cli {
     command: Commands,
 }
 
+#[derive(Parser)]
+struct SwellowArgs {
+    #[arg(
+        long,
+        help = "Migrate up to the specified version ID.\nLargest value possible: 64 bits.",
+    )]
+    version_id: Option<i64>,
+    #[arg(
+        long,
+        help = "Generate the migration and skip execution.",
+    )]
+    plan: bool,
+    #[arg(
+        long,
+        help = "Generate the migration, execute it, then rollback the transaction.",
+    )]
+    dry_run: bool
+}
+
 #[derive(Subcommand)]
 enum Commands {
-    /// Test connection to DB.
+    #[command(about = "Test connection to the database.")]
     Peck {},
-    Plan {
-        #[arg(
-            long,
-            help = "Migrate up to the specified version ID.\nLargest value possible: 64 bits.",
-        )]
-        version_id: Option<i64>
-    }
+
+    #[command(about = "Generate a migration plan and execute it.")]
+
+    Up {
+        #[command(flatten)]
+        args: SwellowArgs,
+    },
+    Down {
+        #[command(flatten)]
+        args: SwellowArgs,
+    },
+}
+
+enum MigrationDirection {
+    Up,
+    Down
 }
 
 #[tokio::main]
@@ -73,14 +101,20 @@ async fn main() -> sqlx::Result<()> {
         Commands::Peck { } => {
             commands::peck(db_connection_string).await?;
         }
-        Commands::Plan { version_id } => {
-            // If no version is specified, set the largest possible number.
-            let version_id = version_id.unwrap_or(i64::MAX);
-
-            commands::plan(
+        Commands::Up { args } => {
+            commands::migrate(
                 db_connection_string,
                 migration_directory,
-                version_id
+                args,
+                MigrationDirection::Up
+            ).await?;
+        }
+        Commands::Down { args } => {
+            commands::migrate(
+                db_connection_string,
+                migration_directory,
+                args,
+                MigrationDirection::Down
             ).await?;
         }
     }
