@@ -29,13 +29,17 @@ pub async fn ensure_table(pool: &Pool<Postgres>) -> sqlx::Result<()> {
     Ok(())
 }
 
-pub async fn begin(mut tx: Transaction<'static, Postgres>) -> sqlx::Result<Vec<Record>> {
+pub async fn begin(
+    mut tx: Transaction<'static, Postgres>
+) -> sqlx::Result<Vec<Record>> {
+    tracing::info!("Acquiring lock on records table...");
     // Acquire a lock on the swellow_records table
     // To ensure no other migration process is underway.
     sqlx::query("LOCK TABLE swellow_records IN ACCESS EXCLUSIVE MODE")
         .execute(&mut *tx)
         .await?;
 
+    tracing::info!("Getting latest migrations from records...");
     // Get the latest migrations for each object.
     let rows: Vec<Record> = sqlx::query_as::<_, Record>("
     SELECT

@@ -17,7 +17,8 @@ pub enum ResourceType {
 #[derive(Debug)]
 pub struct Resource {
     pub name: String,
-    pub object_type: ResourceType,
+    pub object_type: String,
+    pub statement: String
 }
 
 /// Extract version ID from folder name: "001_create_users" -> 1
@@ -50,29 +51,33 @@ fn parse_sql_file(file_path: &Path) -> Result<Vec<Resource>, String> {
         match stmt {
             Statement::CreateTable(table) => resources.push(Resource {
                 name: object_name_to_string(&table.name),
-                object_type: ResourceType::Table,
+                object_type: "TABLE".to_string(),
+                statement: "CREATE".to_string()
             }),
             Statement::AlterTable { name, .. } => resources.push(Resource {
                 name: object_name_to_string(&name),
-                object_type: ResourceType::Table,
+                object_type: "TABLE".to_string(),
+                statement: "ALTER".to_string()
             }),
             Statement::Drop { object_type, names, .. } => {
                 for name in names {
                     let rtype = match object_type {
-                        sqlparser::ast::ObjectType::Table => ResourceType::Table,
-                        sqlparser::ast::ObjectType::Index => ResourceType::Index,
-                        sqlparser::ast::ObjectType::Sequence => ResourceType::Sequence,
-                        _ => ResourceType::Other,
+                        sqlparser::ast::ObjectType::Table => "TABLE",
+                        sqlparser::ast::ObjectType::Index => "INDEX",
+                        sqlparser::ast::ObjectType::Sequence => "SEQUENCE",
+                        _ => "OTHER",
                     };
                     resources.push(Resource {
                         name: object_name_to_string(&name),
-                        object_type: rtype,
+                        object_type: rtype.to_string(),
+                        statement: "DROP".to_string()
                     });
                 }
             }
             Statement::CreateIndex(index) => resources.push(Resource {
                 name: object_name_to_string(&index.table_name),
-                object_type: ResourceType::Index,
+                object_type: "INDEX".to_string(),
+                statement: "CREATE".to_string()
             }),
             _ => {}
         }
@@ -86,7 +91,7 @@ fn parse_sql_file(file_path: &Path) -> Result<Vec<Resource>, String> {
 fn gather_resources_from_migration_dir_with_id(
     version_path: PathBuf,
     version_id: i64,
-) -> Result<(i64, Vec<Resource>), String> {
+) -> Result<(i64, PathBuf, Vec<Resource>), String> {
     let mut all_resources = Vec::new();
 
     for entry in fs::read_dir(&version_path)
@@ -103,7 +108,7 @@ fn gather_resources_from_migration_dir_with_id(
         return Err(format!("No SQL files found in migration directory: {:?}", version_path));
     }
 
-    Ok((version_id, all_resources))
+    Ok((version_id, version_path, all_resources))
 }
 
 /// Load migrations within [from_version_id, to_version_id], checking global uniqueness first,
@@ -112,7 +117,7 @@ pub fn load_in_interval(
     base_dir: &str,
     from_version_id: i64,
     to_version_id: i64,
-) -> Result<Vec<(i64, Vec<Resource>)>, String> {
+) -> Result<Vec<(i64, PathBuf, Vec<Resource>)>, String> {
     if from_version_id > to_version_id {
         return Err(format!(
             "Invalid version interval: from_version_id ({}) > to_version_id ({})",
@@ -175,13 +180,13 @@ pub fn load_in_interval(
     versions.sort_by_key(|(_, id)| *id);
 
     // 5) Parse only the filtered set
-    let mut migrations: Vec<(i64, Vec<Resource>)> = Vec::new();
+    let mut migrations: Vec<(i64, PathBuf, Vec<Resource>)> = Vec::new();
     for (version_name, version_id) in versions {
-        let pair = gather_resources_from_migration_dir_with_id(
+        let tuple = gather_resources_from_migration_dir_with_id(
             Path::new(base_dir).join(version_name),
             version_id
         )?;
-        migrations.push(pair);
+        migrations.push(tuple);
     }
 
     Ok(migrations)
