@@ -94,7 +94,7 @@ fn gather_resources_from_migration_dir_with_id(
     version_id: i64,
     file_name: &str, // e.g. "up.sql" or "down.sql"
 ) -> Result<(i64, PathBuf, Vec<Resource>), String> {
-    let target_file = version_path.join(format!("{}.sql",file_name));
+    let target_file = version_path.join(file_name);
 
     if !target_file.exists() {
         return Ok((version_id, version_path, vec!()))
@@ -112,7 +112,7 @@ pub fn load_in_interval(
     base_dir: &str,
     from_version_id: i64,
     to_version_id: i64,
-    file_name: &str, // e.g. "up.sql" or "down.sql"
+    direction: &MigrationDirection, // e.g. "up.sql" or "down.sql"
 ) -> Result<Vec<(i64, PathBuf, Vec<Resource>)>, String> {
     if from_version_id > to_version_id {
         return Err(format!(
@@ -162,8 +162,11 @@ pub fn load_in_interval(
         }
     }
 
-    // 3) Filter to the requested interval (inclusive)
-    versions.retain(|(_, id)| *id >= from_version_id && *id <= to_version_id);
+    // 3) Filter to the requested interval
+    versions.retain(|(_, id)| match direction {
+        MigrationDirection::Up => *id > from_version_id && *id <= to_version_id,
+        MigrationDirection::Down => *id >= from_version_id && *id < to_version_id
+    });
 
     if versions.is_empty() {
         return Err(format!(
@@ -181,7 +184,10 @@ pub fn load_in_interval(
         let tuple = gather_resources_from_migration_dir_with_id(
             Path::new(base_dir).join(version_name),
             version_id,
-            file_name, // <-- caller decides
+            match direction {
+                MigrationDirection::Up => "up.sql",
+                MigrationDirection::Down => "down.sql"
+            },
         )?;
         migrations.push(tuple);
     }

@@ -51,14 +51,25 @@ struct Cli {
 struct SwellowArgs {
     #[arg(
         long,
-        help = "Migrate up to the specified version ID.\nLargest value possible: 64 bits.",
+        help = "Specify the database's latest migration version ID.
+Any existing records with a larger version ID will be set to disabled.
+If not set, swellow will assume the current version to be the last enabled record.
+If no record is enabled, swellow will assume the current version to be 0.",
     )]
-    version_id: Option<i64>,
+    current_version_id: Option<i64>,
+
+    #[arg(
+        long,
+        help = "Migrate up/down to the specified version ID.\nOnly numbers up to 64 bits.",
+    )]
+    target_version_id: Option<i64>,
+
     #[arg(
         long,
         help = "Generate the migration and skip execution.",
     )]
     plan: bool,
+    
     #[arg(
         long,
         help = "Generate the migration, execute it, then rollback the transaction.",
@@ -72,11 +83,11 @@ enum Commands {
     Peck {},
 
     #[command(about = "Generate a migration plan and execute it.")]
-
     Up {
         #[command(flatten)]
         args: SwellowArgs,
     },
+    #[command(about = "Generate a rollback plan and execute it.")]
     Down {
         #[command(flatten)]
         args: SwellowArgs,

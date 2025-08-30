@@ -31,13 +31,13 @@ pub fn show_migration_changes(
         MigrationDirection::Down => "Rollback"
     };
 
-    let mut output = "Generating migration plan...\n--- Migration plan ---\n".to_string();
+    let mut output = "Generating migration plan...\n--- Migration plan ---".to_string();
 
     for (version_id, version_path, resources) in migrations {
         // writeln! appends to the String
         writeln!(
             &mut output,
-            "\n{} {}: '{}' -> {} change(s)",
+            "\n---\n{} {}: '{}' -> {} change(s)",
             operation,
             version_id,
             version_path.display(),

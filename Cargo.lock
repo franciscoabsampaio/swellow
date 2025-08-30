@@ -1460,6 +1460,7 @@ name = "swellow"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "sha2",
  "sqlparser",
  "sqlx",
  "tokio",
