@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::fmt::Write;
 
-use crate::migrations::Resource;
+use crate::migration_directory::Resource;
 use crate::MigrationDirection;
 
 pub fn setup_logging(verbose: u8, quiet: bool) {

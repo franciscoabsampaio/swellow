@@ -1,7 +1,7 @@
 // Project
 mod commands;
 mod db;
-mod migrations;
+mod migration_directory;
 mod ux;
 // Dependencies
 use clap::{Parser, Subcommand};
@@ -74,7 +74,7 @@ If no record is enabled, swellow will assume the current version to be 0.",
         long,
         help = "Generate the migration, execute it, then rollback the transaction.",
     )]
-    dry_run: bool
+    dry_run: bool,
 }
 
 #[derive(Subcommand)]
@@ -92,6 +92,15 @@ enum Commands {
         #[command(flatten)]
         args: SwellowArgs,
     },
+
+    #[command(about = "Use pg_dump to take a snapshot of the database schema into a set of CREATE statements.")]
+    Snapshot {
+        #[arg(
+            long,
+            help = "Delete all preceding migrations.",
+        )]
+        squash: bool,
+    }
 }
 
 enum MigrationDirection {
@@ -127,6 +136,9 @@ async fn main() -> sqlx::Result<()> {
                 args,
                 MigrationDirection::Down
             ).await?;
+        }
+        Commands::Snapshot { squash } => {
+            commands::snapshot(db_connection_string, migration_directory, squash);
         }
     }
 

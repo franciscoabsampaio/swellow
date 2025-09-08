@@ -33,6 +33,52 @@ fn extract_version_id(version_name: &str) -> Result<i64, String> {
         .map_err(|_| format!("Version ID is not a number: '{}'", version_name))
 }
 
+/// Collect (version_name, version_id) for all subdirs
+pub fn collect_versions_from_directory(directory: &str) -> Result<Vec<(String, i64)>, String> {
+    // Validate directory
+    let path = Path::new(directory);
+    if !path.is_dir() {
+        return Err(format!(
+            "Target directory '{}' does not exist or is not a directory",
+            directory
+        ));
+    }
+
+    // For each subdirectory, collect (version_name, version_id)
+    let mut versions = Vec::new();
+    for entry in fs::read_dir(path)
+        .map_err(|e| format!("Failed to read directory '{}': {}", directory, e))?
+    {
+        let dir_path = entry.map_err(|e| format!("Failed to read entry: {}", e))?.path();
+        if !dir_path.is_dir() {
+            continue;
+        }
+        let version_name = match dir_path.file_name().and_then(|n| n.to_str()) {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+        let version_id = extract_version_id(&version_name)
+            .map_err(|e| format!("In '{}': {}", version_name, e))?;
+        versions.push((version_name, version_id));
+    }
+
+    // Enforce global uniqueness across ALL subdirs (not just filtered)
+    let mut first_by_id: HashMap<i64, String> = HashMap::new();
+    for (name, id) in &versions {
+        if let Some(first) = first_by_id.insert(*id, name.clone()) {
+            return Err(format!(
+                "Duplicate version_id {} found in directories '{}' and '{}'",
+                id, first, name
+            ));
+        }
+    }
+    
+    // Sort by version_id
+    versions.sort_by_key(|(_, id)| *id);
+
+    Ok(versions)
+}
+
 /// Convert ObjectName to a string like "public.users"
 fn object_name_to_string(name: &ObjectName) -> String {
     name.0.iter().map(|part| part.to_string()).collect::<Vec<_>>().join(".")
@@ -121,53 +167,17 @@ pub fn load_in_interval(
         ));
     }
 
-    let path = Path::new(base_dir);
-    if !path.is_dir() {
-        return Err(format!(
-            "Target directory '{}' does not exist or is not a directory",
-            base_dir
-        ));
-    }
-
-    // 1) Collect (version_name, version_id) for all subdirs
-    let mut versions: Vec<(String, i64)> = Vec::new();
-    for entry in fs::read_dir(path)
-        .map_err(|e| format!("Failed to read directory '{}': {}", base_dir, e))?
-    {
-        let dir_path = entry.map_err(|e| format!("Failed to read entry: {}", e))?.path();
-        if !dir_path.is_dir() {
-            continue;
-        }
-        let version_name = match dir_path.file_name().and_then(|n| n.to_str()) {
-            Some(s) => s.to_string(),
-            None => continue,
-        };
-        let version_id = extract_version_id(&version_name)
-            .map_err(|e| format!("In '{}': {}", version_name, e))?;
-        versions.push((version_name, version_id));
-    }
-
+    // 1) Collect versions from directory
+    let mut versions: Vec<(String, i64)> = collect_versions_from_directory(base_dir)?;
     if versions.is_empty() {
         return Err(format!("No subdirectories found in '{}'", base_dir));
     }
 
-    // 2) Enforce global uniqueness across ALL subdirs (not just filtered)
-    let mut first_by_id: HashMap<i64, String> = HashMap::new();
-    for (name, id) in &versions {
-        if let Some(first) = first_by_id.insert(*id, name.clone()) {
-            return Err(format!(
-                "Duplicate version_id {} found in directories '{}' and '{}'",
-                id, first, name
-            ));
-        }
-    }
-
-    // 3) Filter to the requested interval
+    // 2) Filter to the requested interval
     versions.retain(|(_, id)| match direction {
         MigrationDirection::Up => *id > from_version_id && *id <= to_version_id,
         MigrationDirection::Down => *id >= from_version_id && *id < to_version_id
     });
-
     if versions.is_empty() {
         return Err(format!(
             "No migrations found in interval [{}..={}].",
@@ -175,10 +185,7 @@ pub fn load_in_interval(
         ));
     }
 
-    // 4) Sort by version_id
-    versions.sort_by_key(|(_, id)| *id);
-
-    // 5) Parse only the filtered set
+    // 3) Parse only the filtered set
     let mut migrations: Vec<(i64, PathBuf, Vec<Resource>)> = Vec::new();
     for (version_name, version_id) in versions {
         let tuple = gather_resources_from_migration_dir_with_id(

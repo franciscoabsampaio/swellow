@@ -1,6 +1,7 @@
-use crate::{db, migrations::{self, Resource}, ux, MigrationDirection, SwellowArgs};
-
-use std::path::PathBuf;
+use crate::{db, migration_directory::{self, Resource}, ux, MigrationDirection, SwellowArgs};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process;
 use sqlx::{PgPool, Pool, Postgres, Transaction};
 
 
@@ -25,7 +26,6 @@ async fn plan(
     reference_version_id: Option<i64>,
     direction: MigrationDirection
 ) -> sqlx::Result<(Transaction<'static, Postgres>, Vec<(i64, PathBuf, Vec<Resource>)>)> {
-    tracing::info!("Connecting to the database...");
     let pool: Pool<Postgres> = peck(&db_connection_string).await?;
     let mut tx = pool.begin().await?;
     let records = db::begin(&mut tx).await?;
@@ -68,7 +68,7 @@ async fn plan(
     
     tracing::info!("Loading migrations from directory '{}'...", migration_directory);
     // Get version names in migration_directory.
-    let mut migrations = match migrations::load_in_interval(
+    let mut migrations = match migration_directory::load_in_interval(
         migration_directory,
         from_version,
         to_version,
@@ -119,5 +119,49 @@ pub async fn migrate(
         tracing::info!("Migration completed.");
     }
 
+    Ok(())
+}
+
+pub fn snapshot(
+    db_connection_string: &String,
+    migration_directory: &String,
+    squash: bool
+) -> std::io::Result<()> {
+    // Check if pg_dump is installed
+    if process::Command::new("pg_dump").arg("--version").output()
+        .is_err() {
+        tracing::error!("pg_dump not installed or not in PATH.");
+    }
+
+    // Take snapshot
+    let output = process::Command::new("pg_dump")
+        .arg("--schema-only") // only schema, no data
+        .arg("--no-owner")    // drop ownership info
+        .arg("--no-privileges")
+        .arg(db_connection_string)
+        .output()?;
+
+    if !output.status.success() {
+        eprintln!("pg_dump failed: {}", String::from_utf8_lossy(&output.stderr));
+        std::process::exit(1);
+    }
+
+    // Store to SQL file with the latest possible version.
+    // 1) Get latest version.
+    let new_version: i64 = match migration_directory::collect_versions_from_directory(
+        migration_directory
+    ) {
+        Ok(v) => v.iter().fold(i64::MIN, |acc, (_, v)| acc.max(*v)) + 1,
+        Err(e) => {
+            tracing::error!(e);
+            std::process::exit(1);
+        },
+    };
+    // Output snapshot SQL script to directory with updated version
+    let new_version_directory = Path::new(migration_directory).join(format!("{}_snapshot", new_version));
+    fs::create_dir_all(&new_version_directory)?;
+    fs::write(new_version_directory.join("up.sql"), &output.stdout)?;
+    
+    tracing::info!("Snapshot complete! 🐦");
     Ok(())
 }
