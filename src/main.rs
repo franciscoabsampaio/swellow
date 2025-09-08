@@ -94,13 +94,7 @@ enum Commands {
     },
 
     #[command(about = "Use pg_dump to take a snapshot of the database schema into a set of CREATE statements.")]
-    Snapshot {
-        #[arg(
-            long,
-            help = "Delete all preceding migrations.",
-        )]
-        squash: bool,
-    }
+    Snapshot {}
 }
 
 enum MigrationDirection {
@@ -137,8 +131,8 @@ async fn main() -> sqlx::Result<()> {
                 MigrationDirection::Down
             ).await?;
         }
-        Commands::Snapshot { squash } => {
-            commands::snapshot(db_connection_string, migration_directory, squash);
+        Commands::Snapshot { } => {
+            commands::snapshot(db_connection_string, migration_directory)?;
         }
     }
 

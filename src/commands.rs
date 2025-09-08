@@ -124,8 +124,7 @@ pub async fn migrate(
 
 pub fn snapshot(
     db_connection_string: &String,
-    migration_directory: &String,
-    squash: bool
+    migration_directory: &String
 ) -> std::io::Result<()> {
     // Check if pg_dump is installed
     if process::Command::new("pg_dump").arg("--version").output()
