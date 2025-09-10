@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use sqlparser::ast::{ObjectName, Statement};
+use sqlparser::ast::{ObjectName, ObjectType, Statement};
 use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::Parser;
 
@@ -19,7 +19,7 @@ pub enum ResourceType {
 #[derive(Debug)]
 pub struct Resource {
     pub name: String,
-    pub object_type: String,
+    pub object_type: ObjectType,
     pub statement: String
 }
 
@@ -99,32 +99,26 @@ fn parse_sql_file(file_path: &Path) -> Result<Vec<Resource>, String> {
         match stmt {
             Statement::CreateTable(table) => resources.push(Resource {
                 name: object_name_to_string(&table.name),
-                object_type: "TABLE".to_string(),
+                object_type: ObjectType::Table,
                 statement: "CREATE".to_string()
             }),
             Statement::AlterTable { name, .. } => resources.push(Resource {
                 name: object_name_to_string(&name),
-                object_type: "TABLE".to_string(),
+                object_type: ObjectType::Table,
                 statement: "ALTER".to_string()
             }),
             Statement::Drop { object_type, names, .. } => {
                 for name in names {
-                    let rtype = match object_type {
-                        sqlparser::ast::ObjectType::Table => "TABLE",
-                        sqlparser::ast::ObjectType::Index => "INDEX",
-                        sqlparser::ast::ObjectType::Sequence => "SEQUENCE",
-                        _ => "OTHER",
-                    };
                     resources.push(Resource {
                         name: object_name_to_string(&name),
-                        object_type: rtype.to_string(),
+                        object_type: object_type,
                         statement: "DROP".to_string()
                     });
                 }
             }
             Statement::CreateIndex(index) => resources.push(Resource {
                 name: object_name_to_string(&index.table_name),
-                object_type: "INDEX".to_string(),
+                object_type: ObjectType::Index,
                 statement: "CREATE".to_string()
             }),
             _ => {}
@@ -191,10 +185,7 @@ pub fn load_in_interval(
         let tuple = gather_resources_from_migration_dir_with_id(
             Path::new(base_dir).join(version_name),
             version_id,
-            match direction {
-                MigrationDirection::Up => "up.sql",
-                MigrationDirection::Down => "down.sql"
-            },
+            direction.filename(),
         )?;
         migrations.push(tuple);
     }

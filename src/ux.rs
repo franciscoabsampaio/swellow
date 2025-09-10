@@ -26,11 +26,7 @@ pub fn show_migration_changes(
     migrations: &Vec<(i64, PathBuf, Vec<Resource>)>,
     direction: &MigrationDirection
 ) -> () {
-    let operation = match direction {
-        MigrationDirection::Up => "Migration",
-        MigrationDirection::Down => "Rollback"
-    };
-
+    let operation = direction.noun();
     let mut output = "Generating migration plan...\n--- Migration plan ---".to_string();
 
     for (version_id, version_path, resources) in migrations {
@@ -56,7 +52,7 @@ pub fn show_migration_changes(
             ).unwrap();
 
             // Check for destructive statements
-            if statement.trim_start().to_uppercase().starts_with("DROP") {
+            if statement == "DROP" {
                 destructive_found = true;
             }
         }

@@ -1,4 +1,10 @@
-use crate::{db, migration_directory::{self, Resource}, ux, MigrationDirection, SwellowArgs};
+use crate::{
+    db,
+    migration_directory::{self, Resource},
+    ux,
+    MigrationDirection,
+    SwellowArgs
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -24,16 +30,20 @@ async fn plan(
     migration_directory: &String,
     current_version_id: Option<i64>,
     reference_version_id: Option<i64>,
-    direction: MigrationDirection
-) -> sqlx::Result<(Transaction<'static, Postgres>, Vec<(i64, PathBuf, Vec<Resource>)>)> {
+    direction: &MigrationDirection
+) -> sqlx::Result<(
+    Transaction<'static, Postgres>,
+    Vec<db::Record>,
+    Vec<(i64, PathBuf, Vec<Resource>)>
+)> {
     let pool: Pool<Postgres> = peck(&db_connection_string).await?;
     let mut tx = pool.begin().await?;
-    let records = db::begin(&mut tx).await?;
+    let records: Vec<db::Record> = db::begin(&mut tx).await?;
 
     // Get latest version in records
     let latest_version_from_records = records
         .iter()
-        .map(|m| m.migration_version_id)
+        .map(|m| m.version_id)
         .max()
         .unwrap_or(match direction {
             // If unavailable, set to minimum/maximum
@@ -90,7 +100,7 @@ async fn plan(
     // Show user the plans.
     ux::show_migration_changes(&migrations, &direction);
 
-    Ok((tx, migrations))
+    Ok((tx, records, migrations))
 }
 
 pub async fn migrate(
@@ -99,16 +109,68 @@ pub async fn migrate(
     args: SwellowArgs,
     direction: MigrationDirection
 ) -> sqlx::Result<()> {
-    let (tx, migrations) = plan(
+    let (mut tx, records, migrations) = plan(
         &db_connection_string,
         &migration_directory,
         args.current_version_id,
         args.target_version_id,
-        direction
+        &direction
     ).await?;
 
     if args.plan {
         return Ok(())
+    } else {
+        for (version_id, version_path, vec_of_resources) in migrations {
+            let file_path: PathBuf = version_path.join(direction.filename());
+
+            // Join to records to find OID for each resource
+            let resources_with_oid: Vec<(&Resource, Option<i32>)> = vec_of_resources
+                .iter()
+                .map(|res| (
+                    res,
+                    match records.iter().find(|rec|
+                        res.object_type.to_string() == rec.object_type
+                        && res.name == rec.object_name_after
+                    ) {
+                        Some(r) => Some(r.oid),
+                        _ => None
+                    }
+                ))
+                .collect();
+            
+            // Insert a new migration record for every resource
+            tracing::info!("Inserting new record for version {}", version_id);
+            for (resource, oid) in &resources_with_oid {              
+                db::insert_record(
+                    &mut tx,
+                    *oid,
+                    &resource.object_type,
+                    &resource.name,
+                    version_id,
+                    &file_path,
+                ).await?;
+            }
+
+            // Execute migration
+            tracing::info!(
+                "{} to version {}...",
+                direction.verb(),
+                version_id
+            );
+            db::execute_sql_script(&mut tx, &file_path).await?;
+
+            // Update records' OIDs and status
+            for (resource, oid) in resources_with_oid { 
+                db::update_record(
+                    &mut tx,
+                    &direction,
+                    version_id,
+                    &resource.object_type,
+                    &resource.name,
+                    oid
+                ).await?;
+            }
+        }
     }
 
     if args.dry_run {

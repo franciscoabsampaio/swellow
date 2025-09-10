@@ -2,10 +2,12 @@
 mod commands;
 mod db;
 mod migration_directory;
+mod postgres;
 mod ux;
 // Dependencies
 use clap::{Parser, Subcommand};
 use sqlx;
+use std::fmt;
 
 
 #[derive(Parser)]
@@ -102,6 +104,30 @@ Automatically creates a new version migration subdirectory like '<VERSION>_snaps
 enum MigrationDirection {
     Up,
     Down
+}
+
+impl MigrationDirection {
+    // Returns "Migrating" or "Rolling back"
+    pub fn verb(&self) -> &'static str {
+        match self {
+            MigrationDirection::Up => "Migrating",
+            MigrationDirection::Down => "Rolling back",
+        }
+    }
+    // Returns "Migration" or "Rollback"
+    pub fn noun(&self) -> &'static str {
+        match self {
+            MigrationDirection::Up => "Migration",
+            MigrationDirection::Down => "Rollback",
+        }
+    }
+    // Returns "up.sql" or "down.sql"
+    pub fn filename(&self) -> &'static str {
+        match self {
+            MigrationDirection::Up => "up.sql",
+            MigrationDirection::Down => "down.sql",
+        }
+    }
 }
 
 #[tokio::main]

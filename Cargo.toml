@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive", "env"] }
+phf = { version = "0.13.1", features = ["macros"] }
 sha2 = "0.10"
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "macros"] }
 sqlparser = "0.58"
