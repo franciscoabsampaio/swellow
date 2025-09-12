@@ -2,12 +2,12 @@
 mod commands;
 mod db;
 mod migration_directory;
+mod parser;
 mod postgres;
 mod ux;
 // Dependencies
 use clap::{Parser, Subcommand};
 use sqlx;
-use std::fmt;
 
 
 #[derive(Parser)]
@@ -101,6 +101,8 @@ Automatically creates a new version migration subdirectory like '<VERSION>_snaps
     Snapshot {}
 }
 
+
+#[derive(PartialEq)]
 enum MigrationDirection {
     Up,
     Down

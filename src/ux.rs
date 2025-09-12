@@ -1,8 +1,8 @@
+use crate::parser::{Resource, ResourceCollection};
+use crate::MigrationDirection;
 use std::path::PathBuf;
 use std::fmt::Write;
 
-use crate::migration_directory::Resource;
-use crate::MigrationDirection;
 
 pub fn setup_logging(verbose: u8, quiet: bool) {
     let level = if quiet {
@@ -23,7 +23,7 @@ pub fn setup_logging(verbose: u8, quiet: bool) {
 
 
 pub fn show_migration_changes(
-    migrations: &Vec<(i64, PathBuf, Vec<Resource>)>,
+    migrations: &Vec<(i64, PathBuf, ResourceCollection)>,
     direction: &MigrationDirection
 ) -> () {
     let operation = direction.noun();
@@ -42,19 +42,34 @@ pub fn show_migration_changes(
 
         let mut destructive_found = false;
 
-        for Resource { name, object_type, statement } in resources {
+        for Resource { object_type, name_before, name_after, statements } in resources.iter() {
+            let object_name = if name_before != "-1" { name_before } else {
+                if name_after != "-1" { name_after } else {
+                    "NULL"
+                }
+            };
+            
             writeln!(
                 &mut output,
-                "-> {} {} {}",
-                statement,
+                "-> {} {}:",
+                // name_after,
                 object_type,
-                name,
+                object_name,
             ).unwrap();
 
-            // Check for destructive statements
-            if statement == "DROP" {
-                destructive_found = true;
+            for stmt in statements {
+                writeln!(
+                    &mut output,
+                    "\t-> {}",
+                    stmt,
+                ).unwrap();
+                
+                // Check for destructive statements
+                if stmt == "DROP" {
+                    destructive_found = true;
+                }
             }
+
         }
 
         if destructive_found {

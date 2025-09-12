@@ -1,6 +1,7 @@
 use crate::{
     db,
-    migration_directory::{self, Resource},
+    migration_directory,
+    parser::{Resource, ResourceCollection},
     ux,
     MigrationDirection,
     SwellowArgs
@@ -33,18 +34,13 @@ async fn plan(
     direction: &MigrationDirection
 ) -> sqlx::Result<(
     Transaction<'static, Postgres>,
-    Vec<db::Record>,
-    Vec<(i64, PathBuf, Vec<Resource>)>
+    Vec<(i64, PathBuf, ResourceCollection)>
 )> {
     let pool: Pool<Postgres> = peck(&db_connection_string).await?;
     let mut tx = pool.begin().await?;
-    let records: Vec<db::Record> = db::begin(&mut tx).await?;
-
+    
     // Get latest version in records
-    let latest_version_from_records = records
-        .iter()
-        .map(|m| m.version_id)
-        .max()
+    let latest_version_from_records: i64 = db::begin(&mut tx).await?
         .unwrap_or(match direction {
             // If unavailable, set to minimum/maximum
             MigrationDirection::Up => 0,
@@ -100,7 +96,7 @@ async fn plan(
     // Show user the plans.
     ux::show_migration_changes(&migrations, &direction);
 
-    Ok((tx, records, migrations))
+    Ok((tx, migrations))
 }
 
 pub async fn migrate(
@@ -109,7 +105,7 @@ pub async fn migrate(
     args: SwellowArgs,
     direction: MigrationDirection
 ) -> sqlx::Result<()> {
-    let (mut tx, records, migrations) = plan(
+    let (mut tx, migrations) = plan(
         &db_connection_string,
         &migration_directory,
         args.current_version_id,
@@ -120,35 +116,26 @@ pub async fn migrate(
     if args.plan {
         return Ok(())
     } else {
-        for (version_id, version_path, vec_of_resources) in migrations {
+        for (version_id, version_path, resources) in migrations {
             let file_path: PathBuf = version_path.join(direction.filename());
 
-            // Join to records to find OID for each resource
-            let resources_with_oid: Vec<(&Resource, Option<i32>)> = vec_of_resources
-                .iter()
-                .map(|res| (
-                    res,
-                    match records.iter().find(|rec|
-                        res.object_type.to_string() == rec.object_type
-                        && res.name == rec.object_name_after
-                    ) {
-                        Some(r) => Some(r.oid),
-                        _ => None
+            if direction == MigrationDirection::Up {
+                // Insert a new migration record for every resource
+                tracing::info!("Inserting new record for version {}", version_id);
+                for resource in resources.iter() {
+                    // Skip insertion of doubly NULL records.
+                    if resource.name_before == "-1" && resource.name_after == "-1" {
+                        continue
                     }
-                ))
-                .collect();
-            
-            // Insert a new migration record for every resource
-            tracing::info!("Inserting new record for version {}", version_id);
-            for (resource, oid) in &resources_with_oid {              
-                db::insert_record(
-                    &mut tx,
-                    *oid,
-                    &resource.object_type,
-                    &resource.name,
-                    version_id,
-                    &file_path,
-                ).await?;
+                    db::insert_record(
+                        &mut tx,
+                        &resource.object_type,
+                        &resource.name_before,
+                        &resource.name_after,
+                        version_id,
+                        &file_path,
+                    ).await?;
+                };
             }
 
             // Execute migration
@@ -160,16 +147,20 @@ pub async fn migrate(
             db::execute_sql_script(&mut tx, &file_path).await?;
 
             // Update records' OIDs and status
-            for (resource, oid) in resources_with_oid { 
+            for resource in resources.iter() { 
+                // Skip update of doubly NULL records.
+                if resource.name_before == "-1" && resource.name_after == "-1" {
+                    continue
+                }
                 db::update_record(
                     &mut tx,
                     &direction,
                     version_id,
                     &resource.object_type,
-                    &resource.name,
-                    oid
+                    &resource.name_before,
+                    &resource.name_after,
                 ).await?;
-            }
+            };
         }
     }
 

@@ -1,37 +1,8 @@
+use crate::{MigrationDirection, parser::{self, ResourceCollection}};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use sqlparser::ast::{ObjectName, ObjectType, Statement};
-use sqlparser::dialect::PostgreSqlDialect;
-use sqlparser::parser::Parser;
-
-use crate::MigrationDirection;
-
-#[derive(Debug)]
-pub enum ResourceType {
-    Table,
-    Index,
-    Sequence,
-    Other,
-}
-
-#[derive(Debug)]
-pub struct Resource {
-    pub name: String,
-    pub object_type: ObjectType,
-    pub statement: String
-}
-
-/// Extract version ID from folder name: "001_create_users" -> 1
-fn extract_version_id(version_name: &str) -> Result<i64, String> {
-    version_name
-        .split('_')
-        .next()
-        .ok_or_else(|| format!("Invalid version format: '{}'", version_name))?
-        .parse::<i64>()
-        .map_err(|_| format!("Version ID is not a number: '{}'", version_name))
-}
 
 /// Collect (version_name, version_id) for all subdirs
 pub fn collect_versions_from_directory(directory: &str) -> Result<Vec<(String, i64)>, String> {
@@ -57,7 +28,7 @@ pub fn collect_versions_from_directory(directory: &str) -> Result<Vec<(String, i
             Some(s) => s.to_string(),
             None => continue,
         };
-        let version_id = extract_version_id(&version_name)
+        let version_id = parser::extract_version_id(&version_name)
             .map_err(|e| format!("In '{}': {}", version_name, e))?;
         versions.push((version_name, version_id));
     }
@@ -79,68 +50,22 @@ pub fn collect_versions_from_directory(directory: &str) -> Result<Vec<(String, i
     Ok(versions)
 }
 
-/// Convert ObjectName to a string like "public.users"
-fn object_name_to_string(name: &ObjectName) -> String {
-    name.0.iter().map(|part| part.to_string()).collect::<Vec<_>>().join(".")
-}
-
-/// Parse SQL string from a specific file and return resources it modifies.
-fn parse_sql_file(file_path: &Path) -> Result<Vec<Resource>, String> {
-    let sql = fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file {:?}: {}", file_path, e))?;
-
-    let dialect = PostgreSqlDialect {};
-    let statements = Parser::parse_sql(&dialect, &sql)
-        .map_err(|e| format!("Failed to parse SQL in file {:?}: {}", file_path, e))?;
-
-    let mut resources = Vec::new();
-
-    for stmt in statements {
-        match stmt {
-            Statement::CreateTable(table) => resources.push(Resource {
-                name: object_name_to_string(&table.name),
-                object_type: ObjectType::Table,
-                statement: "CREATE".to_string()
-            }),
-            Statement::AlterTable { name, .. } => resources.push(Resource {
-                name: object_name_to_string(&name),
-                object_type: ObjectType::Table,
-                statement: "ALTER".to_string()
-            }),
-            Statement::Drop { object_type, names, .. } => {
-                for name in names {
-                    resources.push(Resource {
-                        name: object_name_to_string(&name),
-                        object_type: object_type,
-                        statement: "DROP".to_string()
-                    });
-                }
-            }
-            Statement::CreateIndex(index) => resources.push(Resource {
-                name: object_name_to_string(&index.table_name),
-                object_type: ObjectType::Index,
-                statement: "CREATE".to_string()
-            }),
-            _ => {}
-        }
-    }
-
-    Ok(resources)
-}
 
 /// Scan a migration version directory for a specific SQL file and return resources
 fn gather_resources_from_migration_dir_with_id(
     version_path: PathBuf,
     version_id: i64,
     file_name: &str, // e.g. "up.sql" or "down.sql"
-) -> Result<(i64, PathBuf, Vec<Resource>), String> {
+) -> Result<(i64, PathBuf, ResourceCollection), String> {
     let target_file = version_path.join(file_name);
 
     if !target_file.exists() {
-        return Ok((version_id, version_path, vec!()))
+        return Ok((version_id, version_path, ResourceCollection::new()))
     }
 
-    let resources = parse_sql_file(&target_file)?;
+    let sql = fs::read_to_string(&target_file)
+        .map_err(|e| format!("Failed to read file {:?}: {}", target_file, e))?;
+    let resources = parser::parse_sql(&sql)?;
 
     Ok((version_id, version_path, resources))
 }
@@ -153,7 +78,7 @@ pub fn load_in_interval(
     from_version_id: i64,
     to_version_id: i64,
     direction: &MigrationDirection, // e.g. "up.sql" or "down.sql"
-) -> Result<Vec<(i64, PathBuf, Vec<Resource>)>, String> {
+) -> Result<Vec<(i64, PathBuf, ResourceCollection)>, String> {
     if from_version_id > to_version_id {
         return Err(format!(
             "Invalid version interval: from_version_id ({}) > to_version_id ({})",
@@ -180,7 +105,7 @@ pub fn load_in_interval(
     }
 
     // 3) Parse only the filtered set
-    let mut migrations: Vec<(i64, PathBuf, Vec<Resource>)> = Vec::new();
+    let mut migrations: Vec<(i64, PathBuf, ResourceCollection)> = Vec::new();
     for (version_name, version_id) in versions {
         let tuple = gather_resources_from_migration_dir_with_id(
             Path::new(base_dir).join(version_name),
