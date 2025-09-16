@@ -1,4 +1,5 @@
-use crate::{MigrationDirection};
+use crate::commands::MigrationDirection;
+
 use sha2::{Sha256, Digest};
 use sqlparser::ast::ObjectType;
 use sqlx::{Pool, Postgres, Transaction};

@@ -101,37 +101,6 @@ Automatically creates a new version migration subdirectory like '<VERSION>_snaps
     Snapshot {}
 }
 
-
-#[derive(PartialEq)]
-enum MigrationDirection {
-    Up,
-    Down
-}
-
-impl MigrationDirection {
-    // Returns "Migrating" or "Rolling back"
-    pub fn verb(&self) -> &'static str {
-        match self {
-            MigrationDirection::Up => "Migrating",
-            MigrationDirection::Down => "Rolling back",
-        }
-    }
-    // Returns "Migration" or "Rollback"
-    pub fn noun(&self) -> &'static str {
-        match self {
-            MigrationDirection::Up => "Migration",
-            MigrationDirection::Down => "Rollback",
-        }
-    }
-    // Returns "up.sql" or "down.sql"
-    pub fn filename(&self) -> &'static str {
-        match self {
-            MigrationDirection::Up => "up.sql",
-            MigrationDirection::Down => "down.sql",
-        }
-    }
-}
-
 #[tokio::main]
 async fn main() -> sqlx::Result<()> {
     let args: Cli = Cli::parse();
@@ -150,7 +119,7 @@ async fn main() -> sqlx::Result<()> {
                 db_connection_string,
                 migration_directory,
                 args,
-                MigrationDirection::Up
+                commands::MigrationDirection::Up
             ).await?;
         }
         Commands::Down { args } => {
@@ -158,7 +127,7 @@ async fn main() -> sqlx::Result<()> {
                 db_connection_string,
                 migration_directory,
                 args,
-                MigrationDirection::Down
+                commands::MigrationDirection::Down
             ).await?;
         }
         Commands::Snapshot { } => {

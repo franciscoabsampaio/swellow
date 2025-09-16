@@ -1,5 +1,5 @@
 use crate::parser::{Resource, ResourceCollection};
-use crate::MigrationDirection;
+use crate::commands::MigrationDirection;
 use std::path::PathBuf;
 use std::fmt::Write;
 

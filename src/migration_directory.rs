@@ -1,4 +1,4 @@
-use crate::{MigrationDirection, parser::{self, ResourceCollection}};
+use crate::{commands::MigrationDirection, parser::{self, ResourceCollection}};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};

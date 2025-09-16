@@ -1,15 +1,45 @@
 use crate::{
     db,
     migration_directory,
-    parser::{Resource, ResourceCollection},
+    parser::ResourceCollection,
     ux,
-    MigrationDirection,
     SwellowArgs
 };
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
 use sqlx::{PgPool, Pool, Postgres, Transaction};
+
+
+#[derive(PartialEq)]
+pub enum MigrationDirection {
+    Up,
+    Down
+}
+
+impl MigrationDirection {
+    // Returns "Migrating" or "Rolling back"
+    pub fn verb(&self) -> &'static str {
+        match self {
+            MigrationDirection::Up => "Migrating",
+            MigrationDirection::Down => "Rolling back",
+        }
+    }
+    // Returns "Migration" or "Rollback"
+    pub fn noun(&self) -> &'static str {
+        match self {
+            MigrationDirection::Up => "Migration",
+            MigrationDirection::Down => "Rollback",
+        }
+    }
+    // Returns "up.sql" or "down.sql"
+    pub fn filename(&self) -> &'static str {
+        match self {
+            MigrationDirection::Up => "up.sql",
+            MigrationDirection::Down => "down.sql",
+        }
+    }
+}
 
 
 pub async fn peck(

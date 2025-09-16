@@ -2,7 +2,9 @@
 
 **Swellow** is a simple, intuitive tool for managing table migrations, written in Rust.
 
-There are two ways of using Swellow: a [CLI](#cli) and a [Python module](#python-module).
+There are two ways of using Swellow: a [CLI](#cli) and a [Python module](#python-module), both serving as frontend to the Rust backend, ensuring the same safe behaviour, across frontends.
+
+![swellow_diagram](./docs/diagram.svg)
 
 ## CLI
 
