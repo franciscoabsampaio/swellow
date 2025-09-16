@@ -183,6 +183,7 @@ pub fn snapshot(
     if process::Command::new("pg_dump").arg("--version").output()
         .is_err() {
         tracing::error!("pg_dump not installed or not in PATH.");
+        std::process::exit(1);
     }
 
     // Take snapshot

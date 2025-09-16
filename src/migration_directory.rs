@@ -93,10 +93,7 @@ pub fn load_in_interval(
     }
 
     // 2) Filter to the requested interval
-    versions.retain(|(_, id)| match direction {
-        MigrationDirection::Up => *id > from_version_id && *id <= to_version_id,
-        MigrationDirection::Down => *id >= from_version_id && *id < to_version_id
-    });
+    versions.retain(|(_, id)| *id > from_version_id && *id <= to_version_id);
     if versions.is_empty() {
         return Err(format!(
             "No migrations found in interval [{}..={}].",

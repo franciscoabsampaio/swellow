@@ -1,20 +1,11 @@
-use crate::{postgres, MigrationDirection};
+use crate::{MigrationDirection};
 use sha2::{Sha256, Digest};
 use sqlparser::ast::ObjectType;
-use sqlx::{FromRow, Pool, Postgres, Transaction};
+use sqlx::{Pool, Postgres, Transaction};
 use std::fs;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
-
-#[derive(Debug, FromRow)]
-pub struct Record {
-    pub oid: i32,
-    pub version_id: i64,
-    pub object_type: String,
-    pub object_name_before: String,
-    pub object_name_after: String,
-}
 
 pub async fn ensure_table(
     pool: &Pool<Postgres>
@@ -150,8 +141,13 @@ pub async fn execute_sql_script(
     tx: &mut Transaction<'static, Postgres>,
     file_path: &PathBuf
 ) -> sqlx::Result<()> {
-    let sql = fs::read_to_string(file_path)
-        .expect(&format!("Failed to read SQL file: {:?}", file_path));
+    let sql = match fs::read_to_string(file_path) {
+        Ok(sql) => sql,
+        Err(e) => {
+            tracing::error!("Error processing {:?}: {}", file_path, e);
+            std::process::exit(1);
+        }
+    };
     
     // Execute migration
     sqlx::raw_sql(&sql)
@@ -159,21 +155,6 @@ pub async fn execute_sql_script(
         .await?;
 
     Ok(())
-}
-
-
-pub async fn get_oid(
-    tx: &mut Transaction<'static, Postgres>,
-    object_type: &ObjectType,
-    object_name: &String,
-) -> sqlx::Result<i32> {
-    let query = postgres::OID_QUERIES.get(&object_type.to_string()).expect(
-        &format!("Unsupported object type: {}", &object_type)
-    );
-
-    sqlx::query_scalar(query)
-        .bind(object_name)
-        .fetch_one(&mut **tx).await
 }
 
 
@@ -185,29 +166,18 @@ pub async fn update_record(
     object_name_before: &String,
     object_name_after: &String,
 ) -> sqlx::Result<()> {
-    let oid: Option<i32> = match get_oid(
-        tx,
-        object_type,
-        if object_name_after != "-1" {object_name_after} else {object_name_before}
-    ).await {
-        Ok(i) => Some(i),
-        _ => None
-    };
-
     sqlx::query(
         r#"
         UPDATE swellow_records
         SET
-            oid=$1,
-            status=$2
+            status=$1
         WHERE
-            object_type=$3
-            AND object_name_before=$4
-            AND object_name_after=$5
-            AND version_id=$6
+            object_type=$2
+            AND object_name_before=$3
+            AND object_name_after=$4
+            AND version_id=$5
         "#,
     )
-        .bind(oid)
         .bind(match direction {
             MigrationDirection::Up => "APPLIED",
             MigrationDirection::Down => "ROLLED_BACK"

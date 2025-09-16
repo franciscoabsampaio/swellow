@@ -1,6 +1,6 @@
 use phf;
 
-pub static OID_QUERIES: phf::Map<&'static str, &'static str> = phf::phf_map! {
+pub static _OID_QUERIES: phf::Map<&'static str, &'static str> = phf::phf_map! {
     // Tables / Indexes / Views / Sequences / Partitions
     "TABLE" => "SELECT $1::regclass::oid::int",
     "INDEX" => "SELECT $1::regclass::oid::int",
