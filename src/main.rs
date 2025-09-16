@@ -11,7 +11,7 @@ use sqlx;
 
 
 #[derive(Parser)]
-#[command(name = "swellow", version, about = "Database migration tool in Rust.")]
+#[command(name = "swellow", version, about = "The simple, intuitive tool for managing table migrations, written in Rust.")]
 struct Cli {
     #[arg(
         long = "db",

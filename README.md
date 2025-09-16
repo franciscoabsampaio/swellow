@@ -1,8 +1,40 @@
 # Swellow 🐦‍⬛
 
-**Swellow** is a simple, intuitive, Rust-based tool for managing table migrations.
+**Swellow** is a simple, intuitive tool for managing table migrations, written in Rust.
 
-## Features
+There are two ways of using Swellow: a [CLI](#cli) and a [Python module](#python-module).
+
+## CLI
+
+`swellow --help` will show you all commands and options available. Here are the most important:
+
+```sh
+The simple, intuitive tool for managing table migrations, written in Rust.
+
+Usage: swellow [OPTIONS] --db <DB_CONNECTION_STRING> --dir <MIGRATION_DIRECTORY> <COMMAND>
+
+Commands:
+  peck      Test connection to the database.
+  up        Generate a migration plan and execute it.
+  down      Generate a rollback plan and execute it.
+  snapshot  Use pg_dump to take a snapshot of the database schema into a set of CREATE statements.
+
+Options:
+      --db <DB_CONNECTION_STRING>  Database connection string. Please follow the following format:
+                                       postgresql://<username>:<password>@<host>:<port>/<database>
+                                    [env: DB_CONNECTION_STRING]
+      --dir <MIGRATION_DIRECTORY>  Directory containing all migrations [env: MIGRATION_DIRECTORY=]
+```
+
+### Installing the CLI
+
+## Python Module
+
+The Python module exposes both the CLI
+
+### Installing the Python module
+
+Simply run `pip install swellow` or `uv add swellow` to add Swellow to your project!
 
 ### Migration Table
 
