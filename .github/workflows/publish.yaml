@@ -21,8 +21,8 @@ jobs:
       # Setup Rust
       - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
-      # Build the Rust binary
-      - run: cargo build --release
+      # Build the Rust binary and copy it to the Python package directory.
+      - run: cargo build --release && cp target/release/swellow src/swellow/swellow
 
       # Setup Python with UV
       - uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
