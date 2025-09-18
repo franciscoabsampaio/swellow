@@ -1,9 +1,8 @@
 use crate::{
     db,
-    migration_directory,
+    directory,
     parser::ResourceCollection,
-    ux,
-    SwellowArgs
+    ux
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -104,7 +103,7 @@ async fn plan(
     
     tracing::info!("Loading migrations from directory '{}'...", migration_directory);
     // Get version names in migration_directory.
-    let mut migrations = match migration_directory::load_in_interval(
+    let mut migrations = match directory::load_in_interval(
         migration_directory,
         from_version,
         to_version,
@@ -132,18 +131,21 @@ async fn plan(
 pub async fn migrate(
     db_connection_string: &String,
     migration_directory: &String,
-    args: SwellowArgs,
-    direction: MigrationDirection
+    current_version_id: Option<i64>,
+    target_version_id: Option<i64>,
+    direction: MigrationDirection,
+    flag_plan: bool,
+    flag_dry_run: bool
 ) -> sqlx::Result<()> {
     let (mut tx, migrations) = plan(
         &db_connection_string,
         &migration_directory,
-        args.current_version_id,
-        args.target_version_id,
+        current_version_id,
+        target_version_id,
         &direction
     ).await?;
 
-    if args.plan {
+    if flag_plan {
         return Ok(())
     } else {
         for (version_id, version_path, resources) in migrations {
@@ -194,7 +196,7 @@ pub async fn migrate(
         }
     }
 
-    if args.dry_run {
+    if flag_dry_run {
         tx.rollback().await?;
         tracing::info!("Dry run completed.");
     } else {
@@ -231,7 +233,7 @@ pub fn snapshot(
 
     // Store to SQL file with the latest possible version.
     // 1) Get latest version.
-    let new_version: i64 = match migration_directory::collect_versions_from_directory(
+    let new_version: i64 = match directory::collect_versions_from_directory(
         migration_directory
     ) {
         Ok(v) => v.iter().fold(i64::MIN, |acc, (_, v)| acc.max(*v)) + 1,

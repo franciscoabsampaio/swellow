@@ -1,0 +1,21 @@
+[build-system]
+requires = ["maturin>=1.6,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "swellow"
+version = "0.1.0"
+description = "Safe and simple table migrations."
+authors = [{ name = "Francisco A. B. Sampaio", email = "franciscoabsampaio@gmail.com" }]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+
+# Install as a CLI when someone runs `pip install mytool`
+[project.scripts]
+swellow = "swellow.cli:main"
