@@ -22,4 +22,4 @@ swellow = "swellow.cli:main"
 # Hatch (build tool)
 [tool.hatch.build.targets.wheel]
 packages = ["src/swellow"]
-include-files = ["src/swellow/swellow"]
+include-files = ["src/swellow/bin/*"]

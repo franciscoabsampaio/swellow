@@ -14,15 +14,37 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            dir: linux-x86_64
+            bin_ext: ""
+          - target: x86_64-pc-windows-gnu
+            dir: windows-x86_64
+            bin_ext: ".exe"
+          - target: x86_64-apple-darwin
+            dir: macos-x86_64
+            bin_ext: ""
+          - target: aarch64-apple-darwin
+            dir: macos-aarch64
+            bin_ext: ""
     steps:
       # Checkout
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       
-      # Setup Rust
-      - run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      # Setup Rust and install Cross for cross-compilation
+      - run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          cargo install cross
 
       # Build the Rust binary and copy it to the Python package directory.
-      - run: cargo build --release && cp target/release/swellow src/swellow/swellow
+      - run: |
+          rustup target add ${{ matrix.target }} || true
+          cross build --release --target ${{ matrix.target }}
+          mkdir -p src/swellow/bin/${{ matrix.dir }}
+          cp target/${{ matrix.target }}/release/swellow${{ matrix.bin_ext }} src/swellow/bin/${{ matrix.dir }}/swellow${{ matrix.bin_ext }}
 
       # Setup Python with UV
       - uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a9a8868a4 # v6.7.0
@@ -30,19 +52,20 @@ jobs:
           python-version: '3.x'
           enable-cache: true
 
-      # Build package
-      - run: uv build
-
       # Use the commit date instead of the current date during the build.
       - run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
-      - run: python -m build
+      # Build package
+      - run: uv build
 
       # Generate hashes used for provenance.
       - name: generate hash
         id: hash
         run: cd dist && echo "hash=$(sha256sum * | base64 -w0)" >> $GITHUB_OUTPUT
+
+      # Upload artifact for use in later jobs.
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
+          name: artifact
           path: ./dist
 
   provenance:
@@ -85,6 +108,9 @@ jobs:
       id-token: write
     steps:
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: artifact
+          path: artifact/
       - uses: pypa/gh-action-pypi-publish@f7600683efdcb7656dec5b29656edb7bc586e597 # v1.10.3
         with:
           repository-url: https://test.pypi.org/legacy/

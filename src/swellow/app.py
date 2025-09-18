@@ -1,12 +1,24 @@
+from pathlib import Path
+import platform
 import subprocess
 import sys
-import os
 
 
 # Utility: find the Rust binary packaged with Python
-def _swellow_bin():
-    here = os.path.dirname(__file__)
-    return os.path.join(here, "swellow")
+def _swellow_bin() -> Path:
+    system = platform.system()
+    arch = platform.machine()
+
+    current_directory = Path(__file__).parent
+
+    if system == "Linux":
+        return current_directory / f"bin/linux-{arch}/swellow"
+    elif system == "Windows":
+        return current_directory / f"bin/windows-{arch}/swellow.exe"
+    elif system == "Darwin":
+        return current_directory / f"bin/macos-{arch}/swellow"
+    else:
+        raise RuntimeError(f"Unsupported OS: {system}")
 
 
 def _run_swellow(*args):
