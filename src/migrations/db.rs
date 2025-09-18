@@ -97,7 +97,7 @@ pub async fn disable_records(
 }
 
 
-pub async fn insert_record(
+pub async fn upsert_record(
     tx: &mut Transaction<'static, Postgres>,
     object_type: &ObjectType,
     object_name_before: &String,
@@ -123,6 +123,10 @@ pub async fn insert_record(
             $5,
             md5($6)
         )
+        ON CONFLICT (version_id, object_type, object_name_before, object_name_after)
+        DO UPDATE SET
+            status = EXCLUDED.status,
+            checksum = EXCLUDED.checksum
         "#,
     )
         .bind(object_type.to_string())
@@ -162,30 +166,23 @@ pub async fn execute_sql_script(
 pub async fn update_record(
     tx: &mut Transaction<'static, Postgres>,
     direction: &MigrationDirection,
-    version_id: i64,
-    object_type: &ObjectType,
-    object_name_before: &String,
-    object_name_after: &String,
+    version_id: i64
 ) -> sqlx::Result<()> {
+    let status = match direction {
+        MigrationDirection::Up => "APPLIED",
+        MigrationDirection::Down => "ROLLED_BACK"
+    };
+
     sqlx::query(
         r#"
         UPDATE swellow_records
         SET
             status=$1
         WHERE
-            object_type=$2
-            AND object_name_before=$3
-            AND object_name_after=$4
-            AND version_id=$5
+            version_id=$2
         "#,
     )
-        .bind(match direction {
-            MigrationDirection::Up => "APPLIED",
-            MigrationDirection::Down => "ROLLED_BACK"
-        })
-        .bind(object_type.to_string())
-        .bind(object_name_before)
-        .bind(object_name_after)
+        .bind(status)
         .bind(version_id)
         .execute(&mut **tx)
         .await?;

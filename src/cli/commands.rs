@@ -159,7 +159,7 @@ pub async fn migrate(
                     if resource.name_before == "-1" && resource.name_after == "-1" {
                         continue
                     }
-                    db::insert_record(
+                    db::upsert_record(
                         &mut tx,
                         &resource.object_type,
                         &resource.name_before,
@@ -178,21 +178,12 @@ pub async fn migrate(
             );
             db::execute_sql_script(&mut tx, &file_path).await?;
 
-            // Update records' OIDs and status
-            for resource in resources.iter() { 
-                // Skip update of doubly NULL records.
-                if resource.name_before == "-1" && resource.name_after == "-1" {
-                    continue
-                }
-                db::update_record(
-                    &mut tx,
-                    &direction,
-                    version_id,
-                    &resource.object_type,
-                    &resource.name_before,
-                    &resource.name_after,
-                ).await?;
-            };
+            // Update records' status
+            db::update_record(
+                &mut tx,
+                &direction,
+                version_id,
+            ).await?;
         }
     }
 

@@ -51,8 +51,8 @@ def down(db, dir, current_version_id, target_version_id, plan, dry_run):
     _run_swellow(*args)
 
 
-def peck(db):
-    _run_swellow("--db", db, "peck")
+def peck(db, dir):
+    _run_swellow("--db", db, "--dir", dir, "peck")
 
 
 def snapshot(db, dir):

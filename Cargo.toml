@@ -3,10 +3,10 @@ name = "swellow"
 version = "0.1.0"
 edition = "2024"
 
-[lib]
-name = "swellow"
-path = "src/lib.rs"
-crate-type = ["rlib"]
+# [lib]
+# name = "swellow"
+# path = "src/lib.rs"
+# crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "swellow"
@@ -15,8 +15,8 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4.5", features = ["derive", "env"] }
 phf = { version = "0.13.1", features = ["macros"] }
-pyo3 = { version = "0.26", features = ["extension-module", "experimental-async"] }
-pyo3-async-runtimes = { version = "0.26.0", features = ["tokio-runtime"] }
+# pyo3 = { version = "0.26", features = ["extension-module", "experimental-async"] }
+# pyo3-async-runtimes = { version = "0.26.0", features = ["tokio-runtime"] }
 sha2 = "0.10"
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "macros"] }
 sqlparser = "0.58"

@@ -1,6 +1,6 @@
 [build-system]
-requires = ["maturin>=1.6,<2.0"]
-build-backend = "maturin"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "swellow"
@@ -16,6 +16,9 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
 ]
 
-# Install as a CLI when someone runs `pip install mytool`
 [project.scripts]
 swellow = "swellow.cli:main"
+
+# Hatch (build tool)
+[tool.hatch.build.targets.wheel]
+packages = ["src/swellow"]

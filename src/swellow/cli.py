@@ -33,7 +33,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "peck":
-        peck(args.db)
+        peck(args.db, args.dir)
     elif args.command == "up":
         up(args.db, args.dir, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
     elif args.command == "down":
