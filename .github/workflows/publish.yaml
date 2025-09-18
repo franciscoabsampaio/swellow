@@ -57,7 +57,10 @@ jobs:
 
       - name: Arrange binaries
         run: |
-          mkdir -p src/swellow/bin
+          mkdir -p src/swellow/bin/linux-x86_64
+          mkdir -p src/swellow/bin/windows-x86_64
+          mkdir -p src/swellow/bin/macos-x86_64
+          mkdir -p src/swellow/bin/macos-aarch64
           cp bins/bin-linux-x86_64/swellow src/swellow/bin/linux-x86_64/swellow
           cp bins/bin-windows-x86_64/swellow.exe src/swellow/bin/windows-x86_64/swellow.exe
           cp bins/bin-macos-x86_64/swellow src/swellow/bin/macos-x86_64/swellow
