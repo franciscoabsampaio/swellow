@@ -4,6 +4,8 @@ name: Build, Release and Publish
 # or can be triggered manually for testing or special releases.
 on:
   push:
+    branches:
+      - release
     tags:
       - 'v*.*.*'
   workflow_dispatch:
