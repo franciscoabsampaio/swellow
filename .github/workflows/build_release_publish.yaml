@@ -4,6 +4,8 @@ name: Build, Release and Publish
 # or can be triggered manually for testing or special releases.
 on:
   push:
+    branches:
+      - release
     tags:
       - 'v*.*.*'
   workflow_dispatch:
@@ -64,7 +66,7 @@ jobs:
           targets: ${{ matrix.target }}
       - run: cargo build --release --target ${{ matrix.target }}
 
-      # Upload the raw binary for the Python packaging job.
+      # Upload the raw binary for the Python packaging step in the release job.
       - name: Upload raw binary artifact
         uses: actions/upload-artifact@v4
         with:
@@ -76,13 +78,18 @@ jobs:
       - name: Create release archive
         shell: bash
         run: |
-          mkdir -p release
-          mv target/${{ matrix.target }}/release/${{ env.PROJECT_NAME }}${{ matrix.bin_ext }} release/
-          cd release
+          # Create a temporary directory for the archive contents
+          mkdir release_dir
+          mv target/${{ matrix.target }}/release/${{ env.PROJECT_NAME }}${{ matrix.bin_ext }} release_dir/
+
+          # Set the archive name
+          ARCHIVE_NAME="${{ env.PROJECT_NAME }}-${{ needs.prepare.outputs.version }}-${{ matrix.target }}"
+          
+          # Create the appropriate archive type
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            7z a ../${{ env.PROJECT_NAME }}-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.zip .
+            7z a "${ARCHIVE_NAME}.zip" ./release_dir/*
           else
-            tar -czvf ../${{ env.PROJECT_NAME }}-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.tar.gz .
+            tar -czvf "${ARCHIVE_NAME}.tar.gz" -C release_dir .
           fi
 
       # Upload the compressed archive for the release job.
@@ -102,8 +109,6 @@ jobs:
       id-token: write
       # Required for creating the GitHub release and uploading assets.
       contents: write
-      # Required for the SLSA generator to read repository information.
-      actions: read
     steps:
       - uses: actions/checkout@v4
 
@@ -130,14 +135,13 @@ jobs:
       # Arrange the downloaded raw binaries into the Python source tree.
       - name: Arrange binaries for Python package
         run: |
-          mkdir -p src/${{ env.PROJECT_NAME }}/bin
           find raw-binaries -type f -name "${{ env.PROJECT_NAME }}*" | while read bin; do
-            target_dir=$(basename $(dirname "$bin"))
+            target_dir=$(basename "$(dirname "$bin")")
             case $target_dir in
-              x86_64-unknown-linux-gnu) dir="linux-x86_64" ;;
-              x86_64-pc-windows-gnu) dir="windows-x86_64" ;;
-              x86_64-apple-darwin) dir="macos-x86_64" ;;
-              aarch64-apple-darwin) dir="macos-aarch64" ;;
+              raw-binary-x86_64-unknown-linux-gnu) dir="linux-x86_64" ;;
+              raw-binary-x86_64-pc-windows-gnu) dir="windows-x86_64" ;;
+              raw-binary-x86_64-apple-darwin) dir="macos-x86_64" ;;
+              raw-binary-aarch64-apple-darwin) dir="macos-aarch64" ;;
             esac
             mkdir -p src/${{ env.PROJECT_NAME }}/bin/$dir
             mv "$bin" src/${{ env.PROJECT_NAME }}/bin/$dir/
@@ -157,15 +161,27 @@ jobs:
       - name: Stage Python packages for release
         run: mv dist/* release-assets/
 
-      # The SLSA generator creates the release, uploads all assets from the
-      # specified directory, and attaches the generated provenance file.
-      - name: Generate SLSA Provenance and create release
-        uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+      # --- Provenance and Release ---
+      - name: Generate SLSA provenance
+        id: slsa
+        uses: slsa-framework/slsa-generator-action@v2.0.0
         with:
-          # The tag for the release, derived from the 'prepare' job.
-          release_tag: ${{ needs.prepare.outputs.version }}
-          # The directory containing all assets to be uploaded and attested.
-          assets-dir: release-assets
+          # The generator will scan this directory, hash all files,
+          # and create a provenance attestation for them.
+          artifact-path: release-assets/
+          slsa-level: 3 # Request SLSA Build L3
+
+      # This action creates the GitHub release and uploads all assets from the
+      # release-assets directory, plus the generated provenance file.
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.version }}
+          # Use the generated provenance file as the main body of the release notes.
+          body_path: ${{ steps.slsa.outputs.provenance-path }}
+          files: |
+            release-assets/*
+            ${{ steps.slsa.outputs.provenance-path }}
 
   publish-pypi:
     needs: [release]
