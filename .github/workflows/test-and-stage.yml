@@ -1,0 +1,180 @@
+name: Staging Build & Test
+
+on:
+  pull_request:
+    branches:
+      - release
+
+env:
+  PROJECT_NAME: swellow
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get project version
+        id: get_version
+        shell: bash
+        run: |
+          PROJECT_VERSION=$(grep "^version = " pyproject.toml | sed -e 's/version = "//' -e 's/"//')
+          echo "version=$PROJECT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Tag commit with version
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TAG="v${{ steps.get_version.outputs.version }}"
+          git tag -f "$TAG"   # overwrite existing tag if any
+          git push origin "$TAG" --force
+
+  build-binaries:
+    needs: [prepare]
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            dir: linux-x86_64
+            bin_ext: ""
+          - target: x86_64-pc-windows-gnu
+            os: windows-latest
+            dir: windows-AMD64
+            bin_ext: ".exe"
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            dir: macos-x86_64
+            bin_ext: ""
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            dir: macos-arm64
+            bin_ext: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+      - name: Upload raw binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: raw-binary-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/${{ env.PROJECT_NAME }}${{ matrix.bin_ext }}
+
+  build-and-test-source:
+    needs: [build-binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download raw binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: raw-binary-*
+          path: raw-binaries
+          merge-multiple: true
+      - name: Arrange binaries for Python package
+        shell: bash
+        run: |
+          find raw-binaries -type f -name "${{ env.PROJECT_NAME }}*" | while read bin; do
+            target_dir_raw=$(basename "$(dirname "$bin")")
+            target_triple=${target_dir_raw#raw-binary-}
+            
+            # Map Rust target triple to the directory structure expected by app.py
+            case $target_triple in
+              x86_64-unknown-linux-gnu) dir="linux-x86_64" ;;
+              x86_64-pc-windows-gnu) dir="windows-AMD64" ;; # platform.machine() on Windows is often AMD64
+              x86_64-apple-darwin) dir="macos-x86_64" ;;
+              aarch64-apple-darwin) dir="macos-arm64" ;; # platform.machine() on Apple Silicon is arm64
+              *)
+                echo "Error: Unknown target triple $target_triple"
+                exit 1
+                ;;
+            esac
+
+            mkdir -p src/${{ env.PROJECT_NAME }}/bin/$dir
+            mv "$bin" src/${{ env.PROJECT_NAME }}/bin/$dir/
+          done
+      - name: "Install Python and build tools"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v1
+      - name: Build Python package
+        run: uv build --sdist --wheel
+      - name: Upload distributables for testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist-${{ github.event.pull_request.number }}
+          path: dist/
+
+  test-from-source:
+    needs: [build-and-test-source]
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v1
+      - name: Download distributables
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist-${{ github.event.pull_request.number }}
+          path: dist/
+      - name: Run Pytest
+        run: |
+          uv pip install pytest
+          uv pip install dist/*.whl
+          # pytest tests/
+
+  publish-to-testpypi:
+    needs: [test-from-source]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/swellow
+    steps:
+      - name: Download distributables
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist-${{ github.event.pull_request.number }}
+          path: dist/
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@v1.10.3
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+
+  test-from-testpypi:
+    needs: [publish-to-testpypi, build-and-test-source]
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: "Install Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v1
+      - name: Install and test from TestPyPI
+        run: |
+          uv pip install \
+            --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple \
+            "swellow==${{ needs.build-and-test-source.outputs.version }}"
+          # swellow --version
+          # You can also run a more comprehensive test suite here

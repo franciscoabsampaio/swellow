@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - release
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag to release (e.g., v1.2.3)"
+        required: true
+
+env:
+  PROJECT_NAME: swellow
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version from tag
+        id: get_version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION=${GITHUB_REF##*/}
+          else
+            VERSION=${{ github.event.inputs.tag_name }}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download raw binaries from staging
+        uses: actions/download-artifact@v4
+        with:
+          pattern: raw-binary-*
+          path: raw-binaries
+          # If you want to merge artifacts from multiple jobs, you can add merge-multiple: true
+
+      - name: Arrange binaries for release
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          for bin in raw-binaries/*/*; do
+            cp "$bin" release-assets/
+          done
+
+      - name: Download Python dist from staging
+        uses: actions/download-artifact@v4
+        with:
+          pattern: python-dist-*
+          path: release-assets
+
+      - name: Compute SHA256 hashes
+        id: hash
+        shell: bash
+        run: |
+          cd release-assets
+          for f in *; do
+            sha=$(sha256sum "$f" | cut -d ' ' -f1)
+            echo "${sha}  $f" >> hashes.txt
+          done
+          b64=$(base64 -w0 hashes.txt)
+          echo "hash_b64=$b64" >> $GITHUB_OUTPUT
+
+      - name: Generate SLSA provenance
+        uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+        with:
+          base64-subjects: ${{ steps.hash.outputs.hash_b64 }}
+
+      - name: Create GitHub Release with binaries + Python + provenance
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          files: release-assets/*
+          prerelease: false
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.10.3
+        with:
+          packages-dir: release-assets/
