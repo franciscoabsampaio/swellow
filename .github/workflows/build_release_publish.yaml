@@ -145,10 +145,16 @@ jobs:
             mv "$bin" src/${{ env.PROJECT_NAME }}/bin/$dir/
           done
 
+      # Set up Python for building the package.
+      - name: "Install Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
       # Setup Python environment.
       - uses: astral-sh/setup-uv@v1
         with:
-          python-version: "3.11"
+          version: "0.8.18"
           enable-cache: true
 
       # Build the Python wheel and source distribution.
