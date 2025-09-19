@@ -74,7 +74,7 @@ jobs:
 
       # Compute hash of all files to use as provenance subjects and build the package
       - id: hash
-        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_OUTPUTS
       - run: uv build
 
       # Upload the built wheel/sdist
