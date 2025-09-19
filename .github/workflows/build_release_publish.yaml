@@ -99,16 +99,14 @@ jobs:
           name: release-archive-${{ matrix.target }}
           path: ${{ env.PROJECT_NAME }}-${{ needs.prepare.outputs.version }}-${{ matrix.target }}.*
 
-  # This single job handles Python packaging, release creation, asset upload,
-  # and provenance generation.
   release:
     needs: [prepare, build-binaries]
     runs-on: ubuntu-latest
     permissions:
-      # Required for generating SLSA provenance.
-      id-token: write
-      # Required for creating the GitHub release and uploading assets.
-      contents: write
+      contents: write   # required for GitHub release + assets
+    outputs:
+      version: ${{ needs.prepare.outputs.version }}
+      hash_b64: ${{ steps.hash.outputs.hash_b64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -161,27 +159,42 @@ jobs:
       - name: Stage Python packages for release
         run: mv dist/* release-assets/
 
-      # --- Provenance and Release ---
-      - name: Generate SLSA provenance
-        id: slsa
-        uses: slsa-framework/slsa-generator-action@v2.0.0
-        with:
-          # The generator will scan this directory, hash all files,
-          # and create a provenance attestation for them.
-          artifact-path: release-assets/
-          slsa-level: 3 # Request SLSA Build L3
+      # 🔑 Compute SHA256 hashes and encode in base64 for SLSA workflow
+      - name: Compute hashes
+        id: hash
+        run: |
+          for f in release-assets/*; do
+            sha=$(sha256sum "$f" | cut -d ' ' -f1)
+            echo "${sha}  $f" >> hashes.txt
+          done
+          b64=$(base64 -w0 hashes.txt)
+          echo "hash_b64=$b64" >> $GITHUB_OUTPUT
 
-      # This action creates the GitHub release and uploads all assets from the
-      # release-assets directory, plus the generated provenance file.
-      - name: Create GitHub Release and Upload Assets
+  provenance:
+    needs: [release]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: ${{ needs.release.outputs.hash_b64 }}
+
+  create-release:
+    needs: [release, provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload GitHub Release with assets + provenance
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.prepare.outputs.version }}
-          # Use the generated provenance file as the main body of the release notes.
-          body_path: ${{ steps.slsa.outputs.provenance-path }}
+          tag_name: ${{ needs.release.outputs.version }}
           files: |
             release-assets/*
-            ${{ steps.slsa.outputs.provenance-path }}
+            provenance.attestation.intoto.jsonl
 
   publish-pypi:
     needs: [release]
