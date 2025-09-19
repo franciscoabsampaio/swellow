@@ -1,5 +1,4 @@
-# A more descriptive name for the workflow.
-name: Build and Release
+name: Build, Release and Publish
 
 # This workflow is triggered on a push to a tag (e.g., v1.0.0, v2.3.1)
 # or can be triggered manually for testing or special releases.
