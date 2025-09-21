@@ -46,11 +46,11 @@ jobs:
             echo "TARGET=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
             echo "DIR=linux-x86_64" >> $GITHUB_ENV
             echo "BIN_EXT=" >> $GITHUB_ENV
-          elif [[ "${{ matrix.os }}" == "windows*" ]]; then
+          elif [[ "${{ matrix.os }}" == windows* ]]; then
             echo "TARGET=x86_64-pc-windows-gnu" >> $GITHUB_ENV
             echo "DIR=windows-x86_64" >> $GITHUB_ENV
             echo "BIN_EXT=.exe" >> $GITHUB_ENV
-          elif [[ "${{ matrix.os }}" == "macos*" ]]; then
+          elif [[ "${{ matrix.os }}" == macos* ]]; then
             echo "TARGET=aarch64-apple-darwin" >> $GITHUB_ENV
             echo "DIR=macos-aarch64" >> $GITHUB_ENV
             echo "BIN_EXT=" >> $GITHUB_ENV
