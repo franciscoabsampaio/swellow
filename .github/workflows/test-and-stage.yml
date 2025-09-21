@@ -176,6 +176,8 @@ jobs:
       
       - name: Build package
         run: |
+          set -euo pipefail
+          python -m pip install build
           python -m build --sdist --wheel --outdir dist/
 
       - name: Run Pytest
