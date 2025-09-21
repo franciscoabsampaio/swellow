@@ -99,7 +99,7 @@ jobs:
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.create_release_archive.outputs.archive_name }}
+          name: release-${{ env.TARGET }}
           path: ${{ steps.create_release_archive.outputs.archive_name }}
 
   compute-hashes:
@@ -116,6 +116,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: release-*
+          merge-multiple: true
+          path: ./release-assets
 
       # 🔑 Compute SHA256 hashes and encode in base64 for SLSA workflow
       - name: Compute hashes
