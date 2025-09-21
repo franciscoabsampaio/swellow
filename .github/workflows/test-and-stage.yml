@@ -123,6 +123,7 @@ jobs:
       - name: Compute hashes
         id: hash
         run: |
+          set -euo pipefail
           for f in release-assets/*; do
             sha=$(sha256sum "$f" | cut -d ' ' -f1)
             echo "${sha}  $f" >> hashes.txt
