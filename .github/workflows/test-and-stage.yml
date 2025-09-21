@@ -113,7 +113,7 @@ jobs:
       hash_b64: ${{ steps.hash.outputs.hash_b64 }}
     steps:
       - name: Download all build artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           name: release-*
 
@@ -166,7 +166,7 @@ jobs:
       - uses: astral-sh/setup-uv@v1
       
       - name: Download Rust binaries
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           name: ${{ env.PROJECT_NAME }}-*
           path: src/${{ env.PROJECT_NAME }}/bin/
@@ -195,7 +195,7 @@ jobs:
       url: https://test.pypi.org/p/${{ env.PROJECT_NAME }}
     steps:
       - name: Download distributables
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v4
         with:
           name: dist
       - name: Publish to TestPyPI
