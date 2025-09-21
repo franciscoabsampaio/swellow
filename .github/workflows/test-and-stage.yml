@@ -164,7 +164,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@v1
       
       # Independently of the OS, download binaries for all platforms.
       # This ensures the sdist (which, unlike wheels, is not platform-specific) contains all binaries.
@@ -176,13 +175,12 @@ jobs:
       
       - name: Build package
         run: |
-          uv pip install build
-          uv python -m build --wheel --sdist
+          python -m build --sdist --wheel --outdir dist/
 
       - name: Run Pytest
         run: |
-          uv pip install pytest
-          uv pip install dist/*.whl
+          pip install pytest
+          pip install dist/*.whl
           # TODO: pytest tests/
 
       - name: Upload distributables
