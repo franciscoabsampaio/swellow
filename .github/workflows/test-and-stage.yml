@@ -99,7 +99,7 @@ jobs:
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ env.TARGET }}
+          name: ${{ steps.create_release_archive.outputs.archive_name }}
           path: ${{ steps.create_release_archive.outputs.archive_name }}
 
   compute-hashes:
