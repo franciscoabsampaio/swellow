@@ -74,6 +74,7 @@ jobs:
 
       # Create a compressed archive for the GitHub release.
       - name: Create release archive
+        id: create_release_archive
         shell: bash
         run: |
           # Collect binaries and README into a directory
@@ -86,17 +87,20 @@ jobs:
 
           # Create the appropriate archive type
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            7z a "${ARCHIVE_NAME}.zip" ./release-assets/*
+            EXT="zip"
+            7z a "${ARCHIVE_NAME}.${EXT}" ./release-assets/*
           else
-            tar -czvf "${ARCHIVE_NAME}.tar.gz" -C release-assets .
+            EXT="tar.gz"
+            tar -czvf "${ARCHIVE_NAME}.${EXT}" -C release-assets .
           fi
-      
+          echo "archive_name=release-${ARCHIVE_NAME}.${EXT}" >> $GITHUB_ENV
+
       # Upload archive as artifact
       - name: Upload archive
         uses: actions/upload-artifact@v4
         with:
-          name: build-assets
-          path: ${{ env.PROJECT_NAME }}-${{ needs.tag-version.outputs.version }}-${{ env.TARGET }}.*
+          name: ${{ steps.create_release_archive.outputs.archive_name }}
+          path: ${{ steps.create_release_archive.outputs.archive_name }}
 
   compute-hashes:
     needs: [tag-version, build-binaries]
@@ -111,13 +115,13 @@ jobs:
       - name: Download all build artifacts
         uses: actions/download-artifact@v5
         with:
-          name: build-assets
+          name: release-*
 
       # 🔑 Compute SHA256 hashes and encode in base64 for SLSA workflow
       - name: Compute hashes
         id: hash
         run: |
-          for f in build-assets/*; do
+          for f in release-*; do
             sha=$(sha256sum "$f" | cut -d ' ' -f1)
             echo "${sha}  $f" >> hashes.txt
           done
@@ -131,7 +135,7 @@ jobs:
           name: "${{ env.PROJECT_NAME }} v${{ needs.tag-version.outputs.version }}"
           tag_name: v${{ needs.tag-version.outputs.version }}
           draft: true
-          files: build-assets/*
+          files: release-*
 
   provenance:
     needs: [tag-version, compute-hashes]
