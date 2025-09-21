@@ -123,7 +123,7 @@ jobs:
       - name: Compute hashes
         id: hash
         run: |
-          for f in release-*; do
+          for f in release-assets/*; do
             sha=$(sha256sum "$f" | cut -d ' ' -f1)
             echo "${sha}  $f" >> hashes.txt
           done
