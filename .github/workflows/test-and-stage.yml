@@ -173,7 +173,9 @@ jobs:
           path: src/${{ env.PROJECT_NAME }}/bin/
       
       - name: Build package
-        run: uv build
+        run: |
+          uv pip install build
+          uv python -m build --wheel --sdist
 
       - name: Run Pytest
         run: |
