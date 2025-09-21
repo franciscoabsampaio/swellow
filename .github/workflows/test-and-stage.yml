@@ -176,12 +176,14 @@ jobs:
           path: src/${{ env.PROJECT_NAME }}/bin/
       
       - name: Build package
+        shell: bash
         run: |
           set -euo pipefail
           python -m pip install build
           python -m build --sdist --wheel --outdir dist/
 
       - name: Run Pytest
+        shell: bash
         run: |
           pip install pytest
           pip install dist/*.whl
