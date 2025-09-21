@@ -83,7 +83,7 @@ jobs:
           cp README.md release-assets/
           
           # Set the archive name
-          ARCHIVE_NAME="${{ env.PROJECT_NAME }}-${{ needs.tag-version.outputs.version }}-${{ env.TARGET }}"
+          ARCHIVE_NAME="release-${{ env.PROJECT_NAME }}-${{ needs.tag-version.outputs.version }}-${{ env.TARGET }}"
 
           # Create the appropriate archive type
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
@@ -93,7 +93,7 @@ jobs:
             EXT="tar.gz"
             tar -czvf "${ARCHIVE_NAME}.${EXT}" -C release-assets .
           fi
-          echo "archive_name=release-${ARCHIVE_NAME}.${EXT}" >> $GITHUB_OUTPUT
+          echo "archive_name=${ARCHIVE_NAME}.${EXT}" >> $GITHUB_OUTPUT
 
       # Upload archive as artifact
       - name: Upload archive
