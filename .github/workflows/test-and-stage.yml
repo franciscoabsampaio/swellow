@@ -93,7 +93,7 @@ jobs:
             EXT="tar.gz"
             tar -czvf "${ARCHIVE_NAME}.${EXT}" -C release-assets .
           fi
-          echo "archive_name=release-${ARCHIVE_NAME}.${EXT}" >> $GITHUB_ENV
+          echo "archive_name=release-${ARCHIVE_NAME}.${EXT}" >> $GITHUB_OUTPUT
 
       # Upload archive as artifact
       - name: Upload archive
