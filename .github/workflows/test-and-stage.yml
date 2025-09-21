@@ -12,6 +12,8 @@ jobs:
   tag-version:
     name: Tag Version
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
