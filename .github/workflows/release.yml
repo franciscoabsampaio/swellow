@@ -7,78 +7,88 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Tag to release (e.g., v1.2.3)"
+        description: 'Tag to release (e.g., v1.2.3)'
         required: true
 
 env:
   PROJECT_NAME: swellow
 
 jobs:
-  release:
+  prepare-release:
+    name: Prepare Release
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: write
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Determine version from tag
+      - name: Determine version
         id: get_version
-        shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            VERSION=${GITHUB_REF##*/}
+            VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           else
             VERSION=${{ github.event.inputs.tag_name }}
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Download raw binaries from staging
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: raw-binary-*
-          path: raw-binaries
-          # If you want to merge artifacts from multiple jobs, you can add merge-multiple: true
+          path: artifacts
 
-      - name: Arrange binaries for release
-        shell: bash
+      - name: Create release assets directory
+        run: mkdir release-assets
+
+      - name: Move Python distributions
+        run: find artifacts/python-dist-* -name "*.whl" -o -name "*.tar.gz" | xargs -I {} mv {} release-assets/
+
+      - name: Move Rust binaries
         run: |
-          mkdir -p release-assets
-          for bin in raw-binaries/*/*; do
-            cp "$bin" release-assets/
+          for dir in artifacts/raw-binary-*; do
+            find "$dir" -type f -name "${{ env.PROJECT_NAME }}*" -exec mv {} release-assets/ \;
           done
 
-      - name: Download Python dist from staging
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: release-assets/
+
+  publish-gh-release:
+    name: Publish to GitHub Releases
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets
         uses: actions/download-artifact@v4
         with:
-          pattern: python-dist-*
+          name: release-assets
           path: release-assets
 
-      - name: Compute SHA256 hashes
-        id: hash
-        shell: bash
-        run: |
-          cd release-assets
-          for f in *; do
-            sha=$(sha256sum "$f" | cut -d ' ' -f1)
-            echo "${sha}  $f" >> hashes.txt
-          done
-          b64=$(base64 -w0 hashes.txt)
-          echo "hash_b64=$b64" >> $GITHUB_OUTPUT
-
-      - name: Generate SLSA provenance
-        uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
-        with:
-          base64-subjects: ${{ steps.hash.outputs.hash_b64 }}
-
-      - name: Create GitHub Release with binaries + Python + provenance
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_version.outputs.version }}
+          tag_name: ${{ needs.prepare-release.outputs.version }}
           files: release-assets/*
-          prerelease: false
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: prepare-release
+    environment:
+      name: pypi
+      url: https://pypi.org/p/${{ env.PROJECT_NAME }}
+    permissions:
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: release-assets
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.10.3
+        uses: pypa/gh-action-pypi-publish@v1
         with:
           packages-dir: release-assets/
