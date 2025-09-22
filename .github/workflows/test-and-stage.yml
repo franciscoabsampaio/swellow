@@ -198,7 +198,8 @@ jobs:
       - name: Upload distributables
         uses: actions/upload-artifact@v4
         with:
-          path: dist/*
+          name: dist-${{ matrix.os }}-py${{ matrix.python-version }}.whl
+          path: dist/*.whl
           # overwrite is needed because although wheels are platform-specific,
           # the sdist is not, so it will be uploaded multiple times.
           overwrite: true
