@@ -231,6 +231,7 @@ jobs:
         with:
           pattern: ${{ env.PROJECT_NAME }}-*.whl
           path: dist/
+          merge-multiple: true  # flatten all artifacts into dist/
       - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
