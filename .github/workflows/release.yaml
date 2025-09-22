@@ -14,14 +14,14 @@ env:
   PROJECT_NAME: swellow
 
 jobs:
-  prepare-release:
-    name: Prepare Release
+  get-version:
+    name: Get Version
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.get_version.outputs.version }}
+      version: ${{ steps.extract_version.outputs.version }}
     steps:
-      - name: Determine version
-        id: get_version
+      - name: Extract version from tag or input
+        id: extract_version
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
             VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
@@ -30,51 +30,19 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create release assets directory
-        run: mkdir release-assets
-
-      - name: Move Python distributions
-        run: find artifacts/python-dist-* -name "*.whl" -o -name "*.tar.gz" | xargs -I {} mv {} release-assets/
-
-      - name: Move Rust binaries
-        run: |
-          for dir in artifacts/raw-binary-*; do
-            find "$dir" -type f -name "${{ env.PROJECT_NAME }}*" -exec mv {} release-assets/ \;
-          done
-
-      - name: Upload release assets
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-assets
-          path: release-assets/
-
-  publish-gh-release:
-    name: Publish to GitHub Releases
-    needs: prepare-release
+  publish-rust-binaries:
+    name: Publish Rust Binaries to GitHub Release
+    needs: [get-version]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      version: ${{ needs.get-version.outputs.version }}
     steps:
-      - name: Download release assets
-        uses: actions/download-artifact@v4
-        with:
-          name: release-assets
-          path: release-assets
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare-release.outputs.version }}
-          files: release-assets/*
+      - name: Promote draft release to full release
+        run: gh release edit ${{ needs.get-version.outputs.version }} --draft=false
 
   publish-pypi:
     name: Publish to PyPI
-    needs: prepare-release
+    needs: [get-version]
     environment:
       name: pypi
       url: https://pypi.org/p/${{ env.PROJECT_NAME }}

@@ -97,7 +97,7 @@ jobs:
           cp README.md release-assets/
           
           # Set the archive name
-          ARCHIVE_NAME="release-${{ env.PROJECT_NAME }}-${{ needs.tag-version.outputs.version }}-${{ env.TARGET }}"
+          ARCHIVE_NAME="release-binary-${{ needs.tag-version.outputs.version }}-${{ env.TARGET }}"
 
           # Create the appropriate archive type
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
@@ -150,11 +150,11 @@ jobs:
       - name: Upload distributables
         uses: actions/upload-artifact@v4
         with:
-          name: dist-${{ env.PROJECT_NAME }}
-          path: dist/*.whl
+          name: release-dist-${{ env.PROJECT_NAME }}
+          path: dist/
 
   compute-hashes:
-    needs: [tag-version, build-binaries]
+    needs: [tag-version, build-python-dist]
     permissions:
       actions: read
       id-token: write
@@ -168,25 +168,25 @@ jobs:
         with:
           pattern: release-*
           merge-multiple: true
-          path: ./release-assets
+          path: release/
 
       # 🔑 Compute SHA256 hashes and encode in base64 for SLSA workflow
       - name: Compute hashes
         id: hash
         run: |
           set -euo pipefail
-          for f in release-assets/*; do
+          for f in release/*; do
             sha=$(sha256sum "$f" | cut -d ' ' -f1)
             echo "${sha}  $f" >> hashes.txt
           done
           b64=$(base64 -w0 hashes.txt)
           echo "hash_b64=$b64" >> $GITHUB_OUTPUT
 
-      # Create draft release with archive
+      # Create draft release with distributable and Rust binaries
       - name: Create draft release
         uses: softprops/action-gh-release@v2
         with:
-          name: "${{ env.PROJECT_NAME }} v${{ needs.tag-version.outputs.version }} (draft)"
+          name: "${{ env.PROJECT_NAME }} v${{ needs.tag-version.outputs.version }}"
           tag_name: v${{ needs.tag-version.outputs.version }}
           body: |
             Included in this release:
@@ -195,7 +195,7 @@ jobs:
             - Source code archives.
             - Provenance.
           draft: true
-          files: release-assets/*
+          files: release/*
           overwrite_files: true
 
   provenance:
@@ -222,7 +222,7 @@ jobs:
       - name: Download Python distributable
         uses: actions/download-artifact@v4
         with:
-          pattern: dist-*
+          pattern: release-dist-*
           merge-multiple: true
           path: dist/
 
@@ -250,7 +250,7 @@ jobs:
       - name: Download distributables
         uses: actions/download-artifact@v4
         with:
-          pattern: dist-*
+          pattern: release-${{ env.PROJECT_NAME }}-dist-*
           path: dist/
           merge-multiple: true  # flatten all artifacts into dist/
       - name: Publish to TestPyPI
