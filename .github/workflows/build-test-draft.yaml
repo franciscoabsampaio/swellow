@@ -40,7 +40,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - name: setup environment variables per OS (target, dir, binary extension)
+      - name: Set up environment variables per OS (target, dir, binary extension)
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == ubuntu* ]]; then
@@ -60,18 +60,30 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+
+      # Restore cache for Rust build
+      - name: Cache Rust target
+        uses: actions/cache@v4
+        with:
+          path: target/${{ env.TARGET }}/release/${{ env.PROJECT_NAME }}${{ env.BIN_EXT }}
+          key: rust-binary-${{ env.PROJECT_NAME }}-${{ env.TARGET }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+
+      # Build binary if cache is missing
+      - name: Build Rust binary
+        if: steps.cache-rust.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.TARGET }}
-      - run: cargo build --release --target ${{ env.TARGET }}
+      - name: Cargo build
+        if: steps.cache-rust.outputs.cache-hit != 'true'
+        run: cargo build --release --target ${{ env.TARGET }}
 
-      # Upload the raw binary for the Python packaging step.
-      - name: Upload raw binary artifact
+      # Upload the binary as artifact regardless (cached or freshly built)
+      - name: Upload Rust binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECT_NAME }}-${{ env.DIR }}
           path: target/${{ env.TARGET }}/release/${{ env.PROJECT_NAME }}${{ env.BIN_EXT }}
-
       # Create a compressed archive for the GitHub release.
       - name: Create release archive
         id: create_release_archive
