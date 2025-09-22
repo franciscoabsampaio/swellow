@@ -139,6 +139,12 @@ jobs:
           tag_name: v${{ needs.tag-version.outputs.version }}
           draft: true
           files: release-assets/*
+          body: |
+            Included in this release:
+
+            - Binaries for multiple platforms (`swellow_<platform>`).
+            - Source code archives.
+            - Provenance.
 
   provenance:
     needs: [tag-version, compute-hashes]
