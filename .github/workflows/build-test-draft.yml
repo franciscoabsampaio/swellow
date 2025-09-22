@@ -210,7 +210,7 @@ jobs:
     permissions:
       id-token: write
     environment:
-      name: testpypi
+      name: draft
       url: https://test.pypi.org/p/${{ env.PROJECT_NAME }}
     steps:
       - name: Download distributables
