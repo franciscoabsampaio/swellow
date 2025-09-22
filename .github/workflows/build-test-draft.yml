@@ -1,4 +1,4 @@
-name: CI and Version Tagging
+name: Build, Test, and Draft Release
 
 on:
   pull_request:
