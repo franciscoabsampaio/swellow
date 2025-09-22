@@ -212,14 +212,20 @@ jobs:
       draft-release: true
 
   test-python-distributable:
-    needs: [build-binaries]
+    needs: [build-python-dist]
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Download Python distributable
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist/
+          
       - name: Install Python
         uses: actions/setup-python@v5
         with:
