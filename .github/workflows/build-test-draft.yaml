@@ -63,6 +63,7 @@ jobs:
 
       # Restore cache for Rust build
       - name: Cache Rust target
+        id: cache-rust
         uses: actions/cache@v4
         with:
           path: target/${{ env.TARGET }}/release/${{ env.PROJECT_NAME }}${{ env.BIN_EXT }}
@@ -84,6 +85,7 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-${{ env.DIR }}
           path: target/${{ env.TARGET }}/release/${{ env.PROJECT_NAME }}${{ env.BIN_EXT }}
+
       # Create a compressed archive for the GitHub release.
       - name: Create release archive
         id: create_release_archive
