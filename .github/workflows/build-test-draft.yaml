@@ -225,7 +225,7 @@ jobs:
           pattern: dist-*
           merge-multiple: true
           path: dist/
-          
+
       - name: Install Python
         uses: actions/setup-python@v5
         with:
@@ -270,10 +270,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@v1
       - name: Install and test from TestPyPI
         run: |
-          uv pip install \
+          pip install \
             --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple \
             "${{ env.PROJECT_NAME }}==${{ needs.tag-version.outputs.version }}"
