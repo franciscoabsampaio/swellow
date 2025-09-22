@@ -211,7 +211,7 @@ jobs:
       - name: Upload distributables
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECT_NAME }}-${{ matrix.os }}-py${{ matrix.python-version }}.whl
+          name: dist-${{ env.PROJECT_NAME }}
           path: dist/*.whl
           # overwrite is needed because although wheels are platform-specific,
           # the sdist is not, so it will be uploaded multiple times.
@@ -229,9 +229,10 @@ jobs:
       - name: Download distributables
         uses: actions/download-artifact@v4
         with:
-          pattern: ${{ env.PROJECT_NAME }}-*.whl
+          pattern: dist-*
           path: dist/
           merge-multiple: true  # flatten all artifacts into dist/
+      - run: ls -l dist/     # debug step
       - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

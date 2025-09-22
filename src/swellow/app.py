@@ -12,13 +12,13 @@ def _swellow_bin() -> Path:
     current_directory = Path(__file__).parent
 
     if system == "Linux":
-        return current_directory / f"bin/swellow-linux-{arch}"
+        return current_directory / f"bin/swellow-linux-{arch}/swellow"
     elif system == "Windows":
-        return current_directory / f"bin/swellow-windows-{arch}.exe"
+        return current_directory / f"bin/swellow-windows-{arch}/swellow.exe"
     elif system == "Darwin":
-        return current_directory / f"bin/swellow-macos-{arch}"
+        return current_directory / f"bin/swellow-macos-{arch}/swellow"
     else:
-        raise RuntimeError(f"Unsupported OS: {system}")
+        raise RuntimeError(f"Unsupported OS / architecture: {system} / {arch}")
 
 
 def _run_swellow(*args):
