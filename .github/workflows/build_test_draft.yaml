@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - release
+    paths-ignore:
+      - 'docs/**'
+      - '.github/workflows/release.yaml'
 
 env:
   PROJECT_NAME: swellow
