@@ -1,12 +1,79 @@
 # Swellow 🐦‍⬛
 
-**Swellow** is a simple, intuitive tool for managing table migrations, written in Rust.
+**Swellow** is the simple, SQL-first tool for managing table migrations, written in Rust.
 
-There are two ways of using Swellow: a [CLI](#cli) and a [Python module](#python-module), both serving as frontend to the Rust backend, ensuring the same safe behaviour, across frontends.
+## Getting Started
 
-![swellow_diagram](./docs/diagram.svg)
+Swellow comes in two packages: a [Rust CLI](#cli), and [a Python package](#python-module). We've also created a [GitHub Action for quick-and-easy integration in CI pipelines](https://github.com/franciscoabsampaio/action-swellow/).
 
-## CLI
+Behind the scenes, all versions of swellow use the Rust backend, ensuring consistent behaviour across tools.
+
+<details><summary><b>CLI</b></summary>
+
+Go to the [repository's latest release](https://github.com/franciscoabsampaio/swellow/releases/latest) and download the binary, or do it in the terminal:
+
+```bash
+curl -L https://github.com/franciscoabsampaio/swellow/releases/latest/download/swellow-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+```
+
+Verify the installation:
+
+```bash
+swellow --version
+```
+
+and you're good to go!
+
+</details>
+
+<details>
+<summary><b>Python Module</b></summary>
+
+Just like with any other Python package:
+
+```bash
+pip install swellow
+```
+
+Now you can import it:
+
+```py
+import swellow
+import os
+
+DIRECTORY_WITH_MIGRATIONS='./migrations'
+DATABASE_CONNECTION_STRING=os.getenv("CONNECTION_STRING")
+
+swellow.up(
+  db=DATABASE_CONNECTION_STRING,
+  directory=DIRECTORY_WITH_MIGRATIONS,
+)
+```
+
+Or use it as a CLI:
+
+```bash
+swellow --version
+```
+
+</details>
+
+<details>
+<summary><b>GitHub Action</b></summary>
+
+Simply add it to your workflow:
+
+```yaml
+- name: Execute migrations
+  use: franciscoabsampaio/action-swellow@v1
+  with:
+    - command: up
+    - connection-string: postgresql://<username>:<password>@<host>:<port>/<database>
+```
+
+</details>
+
+## Functionality
 
 `swellow --help` will show you all commands and options available. Here are the most important:
 

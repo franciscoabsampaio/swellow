@@ -2,6 +2,7 @@ from pathlib import Path
 import platform
 import subprocess
 import sys
+from typing import Optional
 
 
 # Utility: find the Rust binary packaged with Python
@@ -29,12 +30,26 @@ def _run_swellow(*args):
     sys.exit(result.returncode)
 
 
-def up(db, dir, current_version_id, target_version_id, plan, dry_run):
-    args = [
-        "--db", db,
-        "--dir", dir,
-        "up"
-    ]
+def up(
+    db: str,
+    directory: str,
+    current_version_id: Optional[int] = None,
+    target_version_id: Optional[int] = None,
+    plan: bool = False,
+    dry_run: bool = False,
+) -> None:
+    """
+    Apply migrations forward from the current to the target version.
+
+    Args:
+        db: Database connection string.
+        directory: Path to the migration directory.
+        current_version_id: The version ID currently applied (if known).
+        target_version_id: The version ID to migrate up to (if specified).
+        plan: If True, output the migration plan without applying changes.
+        dry_run: If True, simulate the migration without modifying the database.
+    """
+    args = ["--db", db, "--dir", directory, "up"]
     if current_version_id is not None:
         args += ["--current-version-id", str(current_version_id)]
     if target_version_id is not None:
@@ -46,12 +61,26 @@ def up(db, dir, current_version_id, target_version_id, plan, dry_run):
     _run_swellow(*args)
 
 
-def down(db, dir, current_version_id, target_version_id, plan, dry_run):
-    args = [
-        "--db", db,
-        "--dir", dir,
-        "down"
-    ]
+def down(
+    db: str,
+    directory: str,
+    current_version_id: Optional[int] = None,
+    target_version_id: Optional[int] = None,
+    plan: bool = False,
+    dry_run: bool = False,
+) -> None:
+    """
+    Roll back migrations from the current to the target version.
+
+    Args:
+        db: Database connection string.
+        directory: Path to the migration directory.
+        current_version_id: The version ID currently applied (if known).
+        target_version_id: The version ID to migrate down to (if specified).
+        plan: If True, output the rollback plan without applying changes.
+        dry_run: If True, simulate the rollback without modifying the database.
+    """
+    args = ["--db", db, "--dir", directory, "down"]
     if current_version_id is not None:
         args += ["--current-version-id", str(current_version_id)]
     if target_version_id is not None:
@@ -63,9 +92,23 @@ def down(db, dir, current_version_id, target_version_id, plan, dry_run):
     _run_swellow(*args)
 
 
-def peck(db, dir):
-    _run_swellow("--db", db, "--dir", dir, "peck")
+def peck(db: str, directory: str) -> None:
+    """
+    Verify connectivity to the database and migration directory.
+
+    Args:
+        db: Database connection string.
+        directory: Path to the migration directory.
+    """
+    _run_swellow("--db", db, "--dir", directory, "peck")
 
 
-def snapshot(db, dir):
-    _run_swellow("--db", db, "--dir", dir, "snapshot")
+def snapshot(db: str, directory: str) -> None:
+    """
+    Create a snapshot of the current migration directory state.
+
+    Args:
+        db: Database connection string.
+        directory: Path to the migration directory.
+    """
+    _run_swellow("--db", db, "--dir", directory, "snapshot")
