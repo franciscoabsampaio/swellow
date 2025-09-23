@@ -5,7 +5,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser(
         prog="swellow",
-        description="The simple, intuitive tool for managing table migrations, written in Rust."
+        description="Swellow is the simple, SQL-first tool for managing table migrations, written in Rust."
     )
     parser.add_argument("--db", required=True, help="Database connection string")
     parser.add_argument("--dir", required=True, help="Directory containing all migrations")

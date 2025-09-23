@@ -4,7 +4,7 @@ pub use clap::{Parser, Subcommand};
 
 
 #[derive(Parser)]
-#[command(name = "swellow", version, about = "The simple, intuitive tool for managing table migrations, written in Rust.")]
+#[command(name = "swellow", version, about = "Swellow is the simple, SQL-first tool for managing table migrations, written in Rust.")]
 pub struct Cli {
     #[arg(
         long = "db",

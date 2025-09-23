@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "swellow"
 version = "0.1.0"
-description = "Safe and simple table migrations."
+description = "SQL-first table migrations."
 authors = [{ name = "Francisco A. B. Sampaio", email = "franciscoabsampaio@gmail.com" }]
 license = "MIT"
 readme = "README.md"

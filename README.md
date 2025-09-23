@@ -114,7 +114,7 @@ If a `swellow_records` table already exists in the target database, the latest m
 `swellow --help` will show you all commands and options available. Here are the most important:
 
 ```sh
-The simple, intuitive tool for managing table migrations, written in Rust.
+Swellow is the simple, SQL-first tool for managing table migrations, written in Rust.
 
 Usage: swellow [OPTIONS] --db <DB_CONNECTION_STRING> --dir <MIGRATION_DIRECTORY> <COMMAND>
 
