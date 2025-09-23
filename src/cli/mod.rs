@@ -8,7 +8,7 @@ pub use clap::{Parser, Subcommand};
 pub struct Cli {
     #[arg(
         long = "db",
-        help = "Database connection string. Please follow the following format:
+        help = "Database connection string. Please follow your database's recommended format, e.g.:
     postgresql://<username>:<password>@<host>:<port>/<database>\n",
         env = "DB_CONNECTION_STRING",
         hide_env_values = true

@@ -91,6 +91,23 @@ New migrations are defined by a subdirectory in the migrations directory, that m
 └── ...
 ```
 
+Here's what an `up.sql` script may look like:
+
+```sql
+-- Create a table of birds 🐦‍⬛ in the aviary
+CREATE TABLE flock (
+    bird_id SERIAL PRIMARY KEY,
+    common_name TEXT NOT NULL,
+    latin_name TEXT NOT NULL,
+    wingspan_cm INTEGER,
+    dtm_hatched_at TIMESTAMP DEFAULT now(),
+    dtm_last_seen_at TIMESTAMP DEFAULT now()
+);
+
+-- Add a new column to track nest activity 🪺
+ALTER TABLE nest ADD COLUMN twigs_collected INTEGER;
+```
+
 **Swellow** automatically gathers all migrations within the specified range (by default, all that haven't been applied), and executes them.
 
 `up.sql` scripts specify the new migration to be applied, and `down.sql` scripts their respective rollback scripts. Missing `up.sql` scripts and missing `down.sql` scripts will result in errors when migrating and rolling back, respectively.
@@ -111,7 +128,7 @@ If a `swellow_records` table already exists in the target database, the latest m
 
 ## CLI Reference
 
-`swellow --help` will show you all commands and options available. Here are the most important:
+`swellow --help` will show you all commands and options available.
 
 ```sh
 Swellow is the simple, SQL-first tool for managing table migrations, written in Rust.
@@ -125,7 +142,7 @@ Commands:
   snapshot  Use pg_dump to take a snapshot of the database schema into a set of CREATE statements.
 
 Options:
-      --db <DB_CONNECTION_STRING>  Database connection string. Please follow the following format:
+      --db <DB_CONNECTION_STRING>  Database connection string. Please follow your database's recommended format:
                                        postgresql://<username>:<password>@<host>:<port>/<database>
                                     [env: DB_CONNECTION_STRING]
       --dir <MIGRATION_DIRECTORY>  Directory containing all migrations [env: MIGRATION_DIRECTORY=]
