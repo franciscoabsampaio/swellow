@@ -94,7 +94,7 @@ New migrations are defined by a subdirectory in the migrations directory, that m
 Here's what an `up.sql` script may look like:
 
 ```sql
--- Create a table of birds 🐦‍⬛ in the aviary
+-- Create a table of birds 🐦‍⬛
 CREATE TABLE flock (
     bird_id SERIAL PRIMARY KEY,
     common_name TEXT NOT NULL,
