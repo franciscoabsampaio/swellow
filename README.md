@@ -73,7 +73,43 @@ Simply add it to your workflow:
 
 </details>
 
-## Functionality
+### Creating New Migrations
+
+Being SQL-first, swellow requires the user to define a `directory` where all migration scripts will be housed.
+
+New migrations are defined by a subdirectory in the migrations directory, that must contain an `up.sql` and a `down.sql` script, and must follow the following naming convention:
+
+```bash
+# Assuming the migrations directory is "./migrations"
+./migration/
+├── 123_this_is_the_first_migration/
+│   │   # 123 is the migration version
+│   ├── up.sql      # This is the migration script
+│   └── down.sql    # This is the rollback script
+├── 242_this_is_the_second/  # Second, because 242 > 123 🥀
+│   └── up.sql               # This migration has no rollback script - when attempting to rollback, this will raise an error. Likewise, a missing 'up.sql' script will raise an error.
+└── ...
+```
+
+**Swellow** automatically gathers all migrations within the specified range (by default, all that haven't been applied), and executes them.
+
+`up.sql` scripts specify the new migration to be applied, and `down.sql` scripts their respective rollback scripts. Missing `up.sql` scripts and missing `down.sql` scripts will result in errors when migrating and rolling back, respectively.
+
+**If any migration or rollback fails, the transaction will be rolled back, and the database will keep its original state.** Users can also preemptively check the validity of transactions by passing the `--dry-run` flag, which automatically cancels (and rolls back) the transaction after executing all migrations.
+
+### Taking Snapshots
+
+The `snapshot` command/function scans the database and creates an `up.sql` script with everything needed to create all relations in the database. Database engines are used by default (e.g. `pg_dump` for PostgreSQL), so be sure to look up the relevant documentation if you find any issue with the snapshot behaviour.
+
+### Migrating to Swellow
+
+**Swellow** makes as few assumptions as possible about an existing database. For this reason, given a directory of migration scripts, all that is required is a connection to the existing database - `swellow up` will take care of the rest.
+
+If you wish to start tracking the database in CI, [take a snapshot](#taking-snapshots).
+
+If a `swellow_records` table already exists in the target database, the latest migration version in its active records (a record is active if it has a status of `APPLIED` or `TESTED`) will be assumed as the current version. This can easily be overriden by specifying the `current_version` argument, or changing the versions in migrations directory to be larger.
+
+## CLI Reference
 
 `swellow --help` will show you all commands and options available. Here are the most important:
 
@@ -95,70 +131,8 @@ Options:
       --dir <MIGRATION_DIRECTORY>  Directory containing all migrations [env: MIGRATION_DIRECTORY=]
 ```
 
-### Installing the CLI
+---
 
-## Python Module
+## License
 
-The Python module exposes both the CLI
-
-### Installing the Python module
-
-Simply run `pip install swellow` or `uv add swellow` to add Swellow to your project!
-
-### Migration Table
-
-- Create table `swellow` if not exist.
-- Schema:
-
-```sql
-id INTEGER,
-oid INTEGER,  -- Object ID, e.g. products
-object_name_before VARCHAR(n),  -- Object name before 
-object_name_after VARCHAR(n),
-version VARCHAR(n),  -- 20251406_00_create_records
-version_id INTEGER,  -- 2025140600
-status VARCHAR(n),  -- E.g. READY, EXECUTED, TESTED, ROLLED_BACK
-checksum INTEGER,
-dtm_created_at TIMESTAMP,
-dtm_updated_at TIMESTAMP
-```
-
-- `checksum` column to detect if someone modified a migration since the last step.
-
-### Directory of Migrations
-
-- The migration directory is expected to have a specific structure.
-- ???
-
-### Flow
-
-- ✅ Check what migrations to apply.
-- ✅ Validate code syntax against database engine.
-- ✅ Warn if a table contains breaking changes (e.g. `DROP`).
-- ✅ Locking: check if a `swellow` process / transaction is already under way.
-- ✅ Allow only atomic changes (no per-resource tracking).
-
-### API
-
-- `swellow peck`.
-  - ✅ Test connection to DB. Can take environment variables or args.
-- `swellow [up | down] [migration_version] [--dry-run]` to perform migration up to the target version, or rollback.
-  - ✅ `up | down`.
-  - ✅ `migration_version`.
-  - ✅ `--dry-run` for dry runs.
-
-```sql
--- Would apply migration 20250827_add_users.sql
--- SQL:
-CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL
-);
-
--- Would apply migration 20250828_add_index.sql
--- SQL:
-CREATE INDEX idx_users_name ON users(name);
-```
-
-- `swellow snapshot` to analyse all migrations and create an up-to-date schema of the existing table.
-- `swellow squash [migration_version]` to squash all migrations up to the target version into a single `CREATE TABLE` `sql` script.
+This action is licensed under the Apache 2.0 License.
