@@ -100,7 +100,7 @@ jobs:
           cp README.md release-assets/
           
           # Set the archive name
-          ARCHIVE_NAME="release-binary-${{ needs.tag-version.outputs.version }}-${{ env.TARGET }}"
+          ARCHIVE_NAME="release-binary-${{ env.TARGET }}"
 
           # Create the appropriate archive type
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
