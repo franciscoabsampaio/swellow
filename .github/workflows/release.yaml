@@ -54,3 +54,4 @@ jobs:
         with:
           packages-dir: release-assets/
           skip-existing: true  # Don't fail if the version already exists
+          verbose: true
