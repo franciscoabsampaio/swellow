@@ -238,7 +238,7 @@ jobs:
       - name: Run Pytest
         shell: bash
         run: |
-          pip install pytest
+          pip install pytest testcontainers
           pip install dist/*.whl
           pytest tests/ -vs
 
@@ -282,5 +282,5 @@ jobs:
             --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple \
             "${{ env.PROJECT_NAME }}==${{ needs.tag-version.outputs.version }}"
-          ${{ env.PROJECT_NAME }} --version
+          pip install pytest testcontainers
           pytest tests/ -vs
