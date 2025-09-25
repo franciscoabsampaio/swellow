@@ -225,6 +225,8 @@ jobs:
       docker:
         image: docker:20.10.24-dind
         options: --privileged
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Download Python distributable
@@ -278,6 +280,8 @@ jobs:
       docker:
         image: docker:20.10.24-dind
         options: --privileged
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: "Install Python"
