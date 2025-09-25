@@ -1,5 +1,6 @@
-from .app import *
+from . import *
 import argparse
+import sys
 
 
 def main():
@@ -32,11 +33,23 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "peck":
-        peck(args.db, args.dir)
-    elif args.command == "up":
-        up(args.db, args.dir, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
-    elif args.command == "down":
-        down(args.db, args.dir, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
-    elif args.command == "snapshot":
-        snapshot(args.db, args.dir)
+    try:
+        if args.command == "peck":
+            return_code = peck(args.db, args.dir)
+        elif args.command == "up":
+            return_code = up(args.db, args.dir, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
+        elif args.command == "down":
+            return_code = down(args.db, args.dir, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
+        elif args.command == "snapshot":
+            return_code = snapshot(args.db, args.dir)
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return_code = 2
+    except SwellowError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return_code = 1
+    except Exception as e:
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        return_code = 1
+
+    sys.exit(return_code)
