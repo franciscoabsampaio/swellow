@@ -1,0 +1,302 @@
+name: Build, Test, and Draft Release
+
+on:
+  pull_request:
+    branches:
+      - release
+    paths-ignore:
+      - 'docs/**'
+      - '.github/workflows/release.yaml'
+
+env:
+  PROJECT_NAME: swellow
+
+jobs:
+  tag-version:
+    name: Tag Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from pyproject.toml
+        id: get_version
+        run: |
+          VERSION=$(grep -Po '(?<=^version = ")[^"]*' pyproject.toml)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f v${{ steps.get_version.outputs.version }}
+          git push -f origin v${{ steps.get_version.outputs.version }}
+
+  build-binaries:
+    needs: [tag-version]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Set up environment variables per OS (target, dir, binary extension)
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == ubuntu* ]]; then
+            echo "TARGET=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+            echo "DIR=linux-x86_64" >> $GITHUB_ENV
+            echo "BIN_EXT=" >> $GITHUB_ENV
+          elif [[ "${{ matrix.os }}" == windows* ]]; then
+            echo "TARGET=x86_64-pc-windows-gnu" >> $GITHUB_ENV
+            echo "DIR=windows-x86_64" >> $GITHUB_ENV
+            echo "BIN_EXT=.exe" >> $GITHUB_ENV
+          elif [[ "${{ matrix.os }}" == macos* ]]; then
+            echo "TARGET=aarch64-apple-darwin" >> $GITHUB_ENV
+            echo "DIR=macos-aarch64" >> $GITHUB_ENV
+            echo "BIN_EXT=" >> $GITHUB_ENV
+          else
+            echo "Unsupported OS: ${{ matrix.os }}"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+
+      # Restore cache for Rust build
+      - name: Cache Rust target
+        id: cache-rust
+        uses: actions/cache@v4
+        with:
+          path: target/${{ env.TARGET }}/release/${{ env.PROJECT_NAME }}${{ env.BIN_EXT }}
+          key: rust-binary-${{ env.PROJECT_NAME }}-${{ env.TARGET }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+
+      # Build binary if cache is missing
+      - name: Build Rust binary
+        if: steps.cache-rust.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TARGET }}
+      - name: Cargo build
+        if: steps.cache-rust.outputs.cache-hit != 'true'
+        run: cargo build --release --target ${{ env.TARGET }}
+
+      # Upload the binary as artifact regardless (cached or freshly built)
+      - name: Upload Rust binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECT_NAME }}-${{ env.DIR }}
+          path: target/${{ env.TARGET }}/release/${{ env.PROJECT_NAME }}${{ env.BIN_EXT }}
+
+      # Create a compressed archive for the GitHub release.
+      - name: Create release archive
+        id: create_release_archive
+        shell: bash
+        run: |
+          # Collect binaries and README into a directory
+          mkdir release-assets
+          cp target/${{ env.TARGET }}/release/${{ env.PROJECT_NAME }}${{ env.BIN_EXT }} release-assets/
+          cp README.md release-assets/
+          
+          # Set the archive name
+          ARCHIVE_NAME="release-binary-${{ env.TARGET }}"
+
+          # Create the appropriate archive type
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            EXT="zip"
+            7z a "${ARCHIVE_NAME}.${EXT}" ./release-assets/*
+          else
+            EXT="tar.gz"
+            tar -czvf "${ARCHIVE_NAME}.${EXT}" -C release-assets .
+          fi
+          echo "archive_name=${ARCHIVE_NAME}.${EXT}" >> $GITHUB_OUTPUT
+
+      # Upload archive as artifact
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.create_release_archive.outputs.archive_name }}
+          path: ${{ steps.create_release_archive.outputs.archive_name }}
+
+  build-python-dist:
+    needs: [build-binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      # Independently of the OS, download binaries for all platforms.
+      # This ensures the distributables contain all binaries.
+      - name: Download Rust binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ env.PROJECT_NAME }}-*
+          path: src/${{ env.PROJECT_NAME }}/bin/
+      - name: Make Rust binaries executable
+        shell: bash
+        run: |
+          chmod +x src/${{ env.PROJECT_NAME }}/bin/*/${{ env.PROJECT_NAME }}*
+
+      - name: Build package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install build
+          python -m build --sdist --wheel --outdir dist/
+
+      - name: Upload distributables
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dist-${{ env.PROJECT_NAME }}
+          path: dist/
+
+  compute-hashes:
+    needs: [tag-version, build-python-dist]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      hash_b64: ${{ steps.hash.outputs.hash_b64 }}
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release/
+
+      # 🔑 Compute SHA256 hashes and encode in base64 for SLSA workflow
+      - name: Compute hashes
+        id: hash
+        run: |
+          set -euo pipefail
+          for f in release/*; do
+            sha=$(sha256sum "$f" | cut -d ' ' -f1)
+            echo "${sha}  $f" >> hashes.txt
+          done
+          b64=$(base64 -w0 hashes.txt)
+          echo "hash_b64=$b64" >> $GITHUB_OUTPUT
+
+      # Create draft release with distributable and Rust binaries
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ env.PROJECT_NAME }} v${{ needs.tag-version.outputs.version }}"
+          tag_name: v${{ needs.tag-version.outputs.version }}
+          body: |
+            Included in this release:
+            
+            - Binaries for multiple platforms (`swellow_<platform>`).
+            - Source code archives.
+            - Provenance.
+          draft: true
+          files: release/*
+          overwrite_files: true
+
+  provenance:
+    needs: [tag-version, compute-hashes]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: ${{ needs.compute-hashes.outputs.hash_b64 }}
+      upload-assets: true
+      upload-tag-name: v${{ needs.tag-version.outputs.version }}
+      draft-release: true
+
+  test-python-distributable:
+    needs: [build-python-dist]
+    strategy:
+      matrix:
+        os: [ubuntu-latest] #, windows-latest, macos-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    services:
+      docker:
+        image: docker:20.10.24-dind
+        options: --privileged
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Python distributable
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-dist-*
+          merge-multiple: true
+          path: dist/
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Run Pytest
+        shell: bash
+        run: |
+          pip install pytest testcontainers
+          pip install dist/*.whl
+          pytest tests/ -vs
+
+  publish-to-testpypi:
+    needs: [test-python-distributable]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    environment:
+      name: draft
+      url: https://test.pypi.org/p/${{ env.PROJECT_NAME }}
+    steps:
+      - name: Download distributables
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-dist-*
+          path: dist/
+          merge-multiple: true  # flatten all artifacts into dist/
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          verbose: true
+
+  test-from-testpypi:
+    needs: [publish-to-testpypi, tag-version]
+    strategy:
+      matrix:
+        os: [ubuntu-latest] #, windows-latest, macos-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    services:
+      docker:
+        image: docker:20.10.24-dind
+        options: --privileged
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Install Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install and test from TestPyPI
+        run: |
+          pip install \
+            --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple \
+            "${{ env.PROJECT_NAME }}==${{ needs.tag-version.outputs.version }}"
+          pip install pytest testcontainers
+          pytest tests/ -vs

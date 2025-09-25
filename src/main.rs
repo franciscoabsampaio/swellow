@@ -6,7 +6,16 @@ use cli::{commands, ux};
 use migrations::{db, directory, parser};
 use sqlx;
 
-
+/// Entry point for the Swellow CLI tool.
+///
+/// This program manages database migrations by delegating to subcommands:
+/// - `peck`: Verify connectivity to the database.
+/// - `up`: Apply migrations forward from the current to target version.
+/// - `down`: Revert migrations backward from the current to target version.
+/// - `snapshot`: Create a snapshot of the current migration state.
+///
+/// Arguments such as `--db` and `--dir` are parsed from the command line
+/// and passed through to the relevant command handlers.
 #[tokio::main]
 async fn main() -> sqlx::Result<()> {
     let args: cli::Cli = cli::Cli::parse();

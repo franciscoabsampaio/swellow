@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - release
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag version to release (e.g., v1.2.3)'
+        required: true
+
+env:
+  PROJECT_NAME: swellow
+
+jobs:
+  get-version:
+    name: Get Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
+    steps:
+      - name: Extract version from input
+        id: extract_version
+        run: |
+          VERSION=${{ github.event.inputs.tag_name }}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+  promote-release:
+    name: Promote Draft Release and Publish to PyPI
+    needs: get-version
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      url: https://pypi.org/project/${{ env.PROJECT_NAME }}
+    permissions:
+      id-token: write
+    steps:
+      - name: Authenticate GH CLI
+        run: gh auth setup-git
+      - name: Promote draft release to full release
+        run: |
+          gh release edit ${{ needs.get-version.outputs.version }} --draft=false
+
+      - name: Download release assets
+        run: |
+          mkdir release-assets
+          gh release download ${{ needs.get-version.outputs.version }} \
+              --pattern "*.whl" \
+              --dir release-assets
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1
+        with:
+          packages-dir: release-assets/
+          skip-existing: true  # Don't fail if the version already exists
+          verbose: true
