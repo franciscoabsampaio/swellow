@@ -222,6 +222,7 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/checkout@v4
       - name: Download Python distributable
         uses: actions/download-artifact@v4
         with:
@@ -239,7 +240,7 @@ jobs:
         run: |
           pip install pytest
           pip install dist/*.whl
-          # TODO: pytest tests/
+          pytest tests/ -vs
 
   publish-to-testpypi:
     needs: [test-python-distributable]
@@ -270,6 +271,7 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/checkout@v4
       - name: "Install Python"
         uses: actions/setup-python@v5
         with:
@@ -281,4 +283,4 @@ jobs:
             --extra-index-url https://pypi.org/simple \
             "${{ env.PROJECT_NAME }}==${{ needs.tag-version.outputs.version }}"
           ${{ env.PROJECT_NAME }} --version
-          # TODO: pytest tests/
+          pytest tests/ -vs
