@@ -1,0 +1,1 @@
+ALTER TABLE flock ADD COLUMN twigs_collected INTEGER;
