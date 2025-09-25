@@ -218,9 +218,13 @@ jobs:
     needs: [build-python-dist]
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest] #, windows-latest, macos-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12"]
     runs-on: ${{ matrix.os }}
+    services:
+      docker:
+        image: docker:20.10.24-dind
+        options: --privileged
     steps:
       - uses: actions/checkout@v4
       - name: Download Python distributable
@@ -267,9 +271,13 @@ jobs:
     needs: [publish-to-testpypi, tag-version]
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest] #, windows-latest, macos-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12"]
     runs-on: ${{ matrix.os }}
+    services:
+      docker:
+        image: docker:20.10.24-dind
+        options: --privileged
     steps:
       - uses: actions/checkout@v4
       - name: "Install Python"
