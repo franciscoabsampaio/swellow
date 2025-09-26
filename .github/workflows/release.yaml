@@ -34,10 +34,14 @@ jobs:
       name: release
       url: https://pypi.org/project/${{ env.PROJECT_NAME }}
     permissions:
+      contents: write  # needed to create releases
       id-token: write
     steps:
       - name: Authenticate GH CLI
-        run: gh auth setup-git
+        run: gh auth login --with-token
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
       - name: Promote draft release to full release
         run: |
           gh release edit ${{ needs.get-version.outputs.version }} --draft=false
