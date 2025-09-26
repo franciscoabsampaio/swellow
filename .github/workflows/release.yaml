@@ -50,7 +50,7 @@ jobs:
               --dir release-assets
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: release-assets/
           skip-existing: true  # Don't fail if the version already exists
