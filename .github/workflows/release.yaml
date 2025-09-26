@@ -61,7 +61,7 @@ jobs:
       - name: Create draft release
         uses: softprops/action-gh-release@v2
         with:
-          name: "${{ env.PROJECT_NAME }} v${{ needs.get-version.outputs.version }}"
+          name: "${{ env.PROJECT_NAME }} ${{ needs.get-version.outputs.version }}"
           tag_name: v${{ needs.get-version.outputs.version }}
           draft: false
           make_latest: true
