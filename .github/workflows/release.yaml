@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - release
   workflow_dispatch:
     inputs:
       tag_name:
@@ -15,6 +12,7 @@ env:
 
 jobs:
   get-version:
+    if: github.ref == 'refs/heads/release'
     name: Get Version
     runs-on: ubuntu-latest
     outputs:
