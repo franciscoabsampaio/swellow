@@ -18,10 +18,31 @@ jobs:
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
     steps:
+      - name: Validate input format
+        run: |
+          VERSION="${{ github.event.inputs.tag_name }}"
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format: $VERSION. Expected something like v1.2.3"
+            exit 1
+          fi
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Verify tag exists
+        run: |
+          VERSION="${{ github.event.inputs.tag_name }}"
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "✅ Tag $VERSION exists"
+          else
+            echo "❌ Tag $VERSION does not exist in the repo"
+            exit 1
+          fi
+
       - name: Extract version from input
         id: extract_version
         run: |
-          VERSION=${{ github.event.inputs.tag_name }}
+          VERSION="${{ github.event.inputs.tag_name }}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
   promote-release:
@@ -40,15 +61,7 @@ jobs:
         with:
           name: "${{ env.PROJECT_NAME }} v${{ needs.get-version.outputs.version }}"
           tag_name: v${{ needs.get-version.outputs.version }}
-          # body: |
-          #   Included in this release:
-            
-          #   - Binaries for multiple platforms (`swellow_<platform>`).
-          #   - Source code archives.
-          #   - Provenance.
           draft: false
-          # files: release/*
-          # overwrite_files: true
           make_latest: true
 
       - name: Publish to PyPI
