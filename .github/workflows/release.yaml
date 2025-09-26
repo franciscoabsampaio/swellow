@@ -35,19 +35,21 @@ jobs:
       contents: write  # needed to create releases
       id-token: write
     steps:
-      - name: Authenticate GH CLI
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
-          
-      - name: Promote draft release to full release
-        run: |
-          gh release edit ${{ needs.get-version.outputs.version }} --draft=false
-
-      - name: Download release assets
-        run: |
-          mkdir release-assets
-          gh release download ${{ needs.get-version.outputs.version }} \
-              --pattern "*.whl" \
-              --dir release-assets
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ env.PROJECT_NAME }} v${{ needs.get-version.outputs.version }}"
+          tag_name: v${{ needs.get-version.outputs.version }}
+          # body: |
+          #   Included in this release:
+            
+          #   - Binaries for multiple platforms (`swellow_<platform>`).
+          #   - Source code archives.
+          #   - Provenance.
+          draft: false
+          # files: release/*
+          # overwrite_files: true
+          make_latest: true
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
