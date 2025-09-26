@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag version to release (e.g., 1.2.3)'
+        description: 'Tag version to release (e.g., v1.2.3)'
         required: true
 
 env:
@@ -21,8 +21,8 @@ jobs:
       - name: Validate input format
         run: |
           VERSION="${{ github.event.inputs.tag_name }}"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Invalid version format: $VERSION. Expected something like 1.2.3"
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format: $VERSION. Expected something like v1.2.3"
             exit 1
           fi
 
@@ -32,10 +32,10 @@ jobs:
       - name: Verify tag exists
         run: |
           VERSION="${{ github.event.inputs.tag_name }}"
-          if git rev-parse "refs/tags/v$VERSION" >/dev/null 2>&1; then
-            echo "✅ Tag v$VERSION exists"
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "✅ Tag $VERSION exists"
           else
-            echo "❌ Tag v$VERSION does not exist in the repo"
+            echo "❌ Tag $VERSION does not exist in the repo"
             exit 1
           fi
 
