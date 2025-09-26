@@ -34,10 +34,10 @@ jobs:
       - name: Verify tag exists
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
-            echo "✅ Tag $VERSION exists"
+          if git rev-parse "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "✅ Tag v$VERSION exists"
           else
-            echo "❌ Tag $VERSION does not exist in the repo"
+            echo "❌ Tag v$VERSION does not exist in the repo"
             exit 1
           fi
 
