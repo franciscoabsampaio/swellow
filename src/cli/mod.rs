@@ -23,6 +23,13 @@ pub struct Cli {
     pub migration_directory: String,
 
     #[arg(
+        long = "engine",
+        help = "Database / catalog engine. [default: postgres]",
+        env = "ENGINE",
+    )]
+    pub engine: String,
+
+    #[arg(
         short,
         long,
         action = clap::ArgAction::Count,

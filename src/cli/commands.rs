@@ -41,6 +41,14 @@ impl MigrationDirection {
 }
 
 
+#[derive(PartialEq)]
+pub enum Engine {
+    Postgres,
+    DatabricksDelta,
+    CloudflareIceberg
+}
+
+
 pub async fn peck(
     db_connection_string: &String
 ) -> sqlx::Result<Pool<Postgres>> {

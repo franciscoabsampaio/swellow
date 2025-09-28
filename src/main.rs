@@ -22,6 +22,9 @@ async fn main() -> sqlx::Result<()> {
 
     let db_connection_string: String = args.db_connection_string;
     let migration_directory: String = args.migration_directory;
+    let engine: cli::Engine = args.engine;
+
+    jdbc:spark://<databricks-instance>:443/default;transportMode=http;ssl=1;httpPath=sql/protocolv1/o/123456/0123-456789-abc123;AuthMech=3;UID=token;PWD=<your-databricks-token>;
 
     ux::setup_logging(args.verbose, args.quiet);
 
