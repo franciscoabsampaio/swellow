@@ -1,9 +1,10 @@
 mod cli;
+mod db;
 mod migrations;
 
 use clap::Parser;
 use cli::{commands, ux};
-use migrations::{db, directory, parser};
+use migrations::{directory, parser};
 use sqlx;
 
 /// Entry point for the Swellow CLI tool.
@@ -22,20 +23,19 @@ async fn main() -> sqlx::Result<()> {
 
     let db_connection_string: String = args.db_connection_string;
     let migration_directory: String = args.migration_directory;
-    let engine: cli::Engine = args.engine;
-
-    jdbc:spark://<databricks-instance>:443/default;transportMode=http;ssl=1;httpPath=sql/protocolv1/o/123456/0123-456789-abc123;AuthMech=3;UID=token;PWD=<your-databricks-token>;
+    let engine = args.engine;
 
     ux::setup_logging(args.verbose, args.quiet);
 
     match args.command {
         cli::Commands::Peck { } => {
-            commands::peck(&db_connection_string).await?;
+            commands::peck(&db_connection_string, &engine).await?;
         }
         cli::Commands::Up { args } => {
             commands::migrate(
                 &db_connection_string,
                 &migration_directory,
+                &engine,
                 args.current_version_id,
                 args.target_version_id,
                 commands::MigrationDirection::Up,
@@ -47,6 +47,7 @@ async fn main() -> sqlx::Result<()> {
             commands::migrate(
                 &db_connection_string,
                 &migration_directory,
+                &engine,
                 args.current_version_id,
                 args.target_version_id,
                 commands::MigrationDirection::Down,
@@ -55,7 +56,7 @@ async fn main() -> sqlx::Result<()> {
             ).await?;
         }
         cli::Commands::Snapshot { } => {
-            commands::snapshot(&db_connection_string, &migration_directory)?;
+            commands::snapshot(&db_connection_string, &migration_directory, &engine)?;
         }
     }
 

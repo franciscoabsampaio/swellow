@@ -1,4 +1,5 @@
 use crate::{
+    cli::Engine,
     db,
     directory,
     parser::ResourceCollection,
@@ -7,7 +8,7 @@ use crate::{
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
-use sqlx::{PgPool, Pool, Postgres, Transaction};
+use sqlx::{Pool, Postgres, Transaction};
 
 
 #[derive(PartialEq)]
@@ -41,25 +42,17 @@ impl MigrationDirection {
 }
 
 
-#[derive(PartialEq)]
-pub enum Engine {
-    Postgres,
-    DatabricksDelta,
-    CloudflareIceberg
-}
-
-
 pub async fn peck(
-    db_connection_string: &String
-) -> sqlx::Result<Pool<Postgres>> {
+    db_connection_string: &String,
+    engine: &Engine,
+) -> sqlx::Result<Option<Pool<Postgres>>> {
     tracing::info!("Pecking database...");
-    let pool: Pool<Postgres> = PgPool::connect(&db_connection_string).await?;
-
-    db::ensure_table(&pool).await?;
+    
+    db::ensure_table(&engine).await?;
 
     tracing::info!("Pecking successful 🐦");
 
-    return Ok(pool)
+    return Ok(Some(pool))
 }
 
 

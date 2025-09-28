@@ -1,0 +1,69 @@
+# SparkDeltaDSN
+
+use odbc::*;
+use std::error::Error;
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let env = create_environment_v3().map_err(|e| e.unwrap())?;
+    let conn = env.connect("SparkDeltaDSN", "user", "password")?;
+
+    let table = "delta.default.my_table";
+
+    // 1️⃣ Capture current version
+    let version: i64 = conn
+        .execute(&format!("DESCRIBE HISTORY {} LIMIT 1", table), ())?
+        .fetch()?.get_data(1)?.unwrap_or("0".to_string())
+        .parse::<i64>()?;
+
+    // 2️⃣ Multi-statement work
+    let result = (|| -> Result<(), Box<dyn Error>> {
+        conn.execute(&format!("INSERT INTO {} VALUES (1, 'foo')", table), ())?;
+        conn.execute(&format!("INSERT INTO {} VALUES (2, 'bar')", table), ())?;
+        Ok(())
+    })();
+
+    // 3️⃣ Rollback on error
+    if let Err(_) = result {
+        conn.execute(&format!(
+            "RESTORE TABLE {} TO VERSION AS OF {}", table, version
+        ), ())?;
+        println!("Rolled back to Delta version {}", version);
+    }
+
+    Ok(())
+}
+
+
+# SparkIcebergDSN
+
+use odbc::*;
+use std::error::Error;
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let env = create_environment_v3().map_err(|e| e.unwrap())?;
+    let conn = env.connect("SparkIcebergDSN", "user", "password")?;
+
+    let table = "iceberg.default.my_table";
+
+    // 1️⃣ Capture current version
+    let snapshot_version: String = conn
+        .execute(&format!("SELECT current_snapshot_id FROM {}.snapshots ORDER BY committed_at DESC LIMIT 1", table), ())?
+        .fetch()?.get_data(1)?.unwrap_or("0".to_string());
+
+    // 2️⃣ Execute statements
+    let result = (|| -> Result<(), Box<dyn Error>> {
+        conn.execute(&format!("INSERT INTO {} VALUES (1, 'x')", table), ())?;
+        conn.execute(&format!("INSERT INTO {} VALUES (2, 'y')", table), ())?;
+        Ok(())
+    })();
+
+    // 3️⃣ Rollback using snapshot
+    if let Err(_) = result {
+        conn.execute(&format!(
+            "ALTER TABLE {} RESTORE VERSION AS OF {}", table, snapshot_version
+        ), ())?;
+        println!("Rolled back to snapshot version {}", snapshot_version);
+    }
+
+    Ok(())
+}

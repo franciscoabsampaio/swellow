@@ -1,39 +1,13 @@
-use crate::commands::MigrationDirection;
+use crate::{cli::Engine, commands::MigrationDirection};
 
+use odbc;
 use sha2::{Sha256, Digest};
 use sqlparser::ast::ObjectType;
-use sqlx::{Pool, Postgres, Transaction};
+use sqlx::{PgPool, Pool, Postgres, Transaction};
 use std::fs;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
-
-pub async fn ensure_table(
-    pool: &Pool<Postgres>
-) -> sqlx::Result<()> {
-    sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
-        .execute(pool)
-        .await?;
-
-    sqlx::query(r#"        
-        CREATE TABLE IF NOT EXISTS swellow_records (
-            oid OID,
-            version_id BIGINT NOT NULL,
-            object_type TEXT NOT NULL,
-            object_name_before TEXT NOT NULL,
-            object_name_after TEXT NOT NULL,
-            status TEXT NOT NULL,
-            checksum TEXT NOT NULL,
-            dtm_created_at TIMESTAMP DEFAULT now(),
-            dtm_updated_at TIMESTAMP DEFAULT now(),
-            PRIMARY KEY (version_id, object_type, object_name_before, object_name_after)
-        );
-    "#)
-        .execute(pool)
-        .await?;
-
-    Ok(())
-}
 
 pub async fn begin(
     tx: &mut Transaction<'static, Postgres>

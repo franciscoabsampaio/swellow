@@ -1,6 +1,27 @@
 pub mod commands;
 pub mod ux;
-pub use clap::{Parser, Subcommand};
+pub use clap::{Parser, Subcommand, ValueEnum};
+
+use crate::db;
+
+
+/// User-facing enum to select engine
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Engine {
+    Postgres,
+    SparkDelta,
+    SparkIceberg,
+}
+
+impl Engine {
+    pub fn into_backend(self, conn_str: String) -> db::EngineBackend {
+        match self {
+            Engine::Postgres => db::EngineBackend::Postgres(db::PostgresEngine { conn_str }),
+            Engine::SparkDelta => db::EngineBackend::SparkDelta(db::OdbcEngine { conn_str, catalog: db::OdbcCatalog::Delta }),
+            Engine::SparkIceberg => db::EngineBackend::SparkIceberg(db::OdbcEngine { conn_str, catalog: db::OdbcCatalog::Iceberg }),
+        }
+    }
+}
 
 
 #[derive(Parser)]
@@ -24,10 +45,12 @@ pub struct Cli {
 
     #[arg(
         long = "engine",
-        help = "Database / catalog engine. [default: postgres]",
+        value_enum,
+        help = "Database / catalog engine.",
+        default_value_t = Engine::Postgres,
         env = "ENGINE",
     )]
-    pub engine: String,
+    pub engine: Engine,
 
     #[arg(
         short,
