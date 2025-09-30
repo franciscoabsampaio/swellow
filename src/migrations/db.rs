@@ -1,36 +1,11 @@
-use crate::{cli::Engine, commands::MigrationDirection};
+use crate::{commands::MigrationDirection};
 
-use odbc;
 use sha2::{Sha256, Digest};
 use sqlparser::ast::ObjectType;
-use sqlx::{PgPool, Pool, Postgres, Transaction};
+use sqlx::{Postgres, Transaction};
 use std::fs;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
-
-
-pub async fn begin(
-    tx: &mut Transaction<'static, Postgres>
-) -> sqlx::Result<Option<i64>> {
-    tracing::info!("Acquiring lock on records table...");
-    // Acquire a lock on the swellow_records table
-    // To ensure no other migration process is underway.
-    sqlx::query("LOCK TABLE swellow_records IN ACCESS EXCLUSIVE MODE;")
-        .execute(&mut **tx)
-        .await?;
-
-    tracing::info!("Getting latest migration version from records...");
-    let version: Option<i64> = sqlx::query_scalar("
-    SELECT
-        MAX(version_id) version_id
-    FROM swellow_records
-    WHERE status IN ('APPLIED', 'TESTED')
-    ")
-        .fetch_one(&mut **tx)
-        .await?;
-
-    return Ok(version)
-}
 
 
 fn file_checksum(path: &Path) -> Result<String, std::io::Error> {

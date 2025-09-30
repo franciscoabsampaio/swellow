@@ -1,5 +1,7 @@
-pub mod backend;
-pub use backend::{DbEngine, PostgresEngine, OdbcEngine, OdbcCatalog};
+mod odbc;
+mod postgres;
+pub use odbc::{OdbcEngine, OdbcCatalog};
+pub use postgres::PostgresEngine;
 
 pub enum EngineBackend {
     Postgres(PostgresEngine),
@@ -15,4 +17,10 @@ impl EngineBackend {
             EngineBackend::SparkIceberg(engine) => engine.ensure_table().await,
         }
     }
+}
+
+// #[async_trait::async_trait]
+pub trait DbEngine {
+    async fn ensure_table(&self) -> anyhow::Result<()>;
+    async fn begin(&mut self) -> anyhow::Result<Option<i64>>;
 }

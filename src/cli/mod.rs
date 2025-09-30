@@ -1,8 +1,8 @@
 pub mod commands;
+use crate::db;
 pub mod ux;
 pub use clap::{Parser, Subcommand, ValueEnum};
-
-use crate::db;
+use tokio::net::tcp::ReuniteError;
 
 
 /// User-facing enum to select engine
@@ -14,11 +14,11 @@ pub enum Engine {
 }
 
 impl Engine {
-    pub fn into_backend(self, conn_str: String) -> db::EngineBackend {
+    pub fn into_backend(self, conn_str: String) -> anyhow::Result<db::EngineBackend> {
         match self {
-            Engine::Postgres => db::EngineBackend::Postgres(db::PostgresEngine { conn_str }),
-            Engine::SparkDelta => db::EngineBackend::SparkDelta(db::OdbcEngine { conn_str, catalog: db::OdbcCatalog::Delta }),
-            Engine::SparkIceberg => db::EngineBackend::SparkIceberg(db::OdbcEngine { conn_str, catalog: db::OdbcCatalog::Iceberg }),
+            Engine::Postgres => Ok(db::EngineBackend::Postgres(db::PostgresEngine::new(conn_str))),
+            Engine::SparkDelta => Ok(db::EngineBackend::SparkDelta(db::OdbcEngine::new(conn_str, db::OdbcCatalog::Delta)?)),
+            Engine::SparkIceberg => Ok(db::EngineBackend::SparkIceberg(db::OdbcEngine::new(conn_str, db::OdbcCatalog::Iceberg)?)),
         }
     }
 }

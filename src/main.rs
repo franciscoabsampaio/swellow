@@ -18,24 +18,23 @@ use sqlx;
 /// Arguments such as `--db` and `--dir` are parsed from the command line
 /// and passed through to the relevant command handlers.
 #[tokio::main]
-async fn main() -> sqlx::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let args: cli::Cli = cli::Cli::parse();
 
     let db_connection_string: String = args.db_connection_string;
     let migration_directory: String = args.migration_directory;
-    let engine = args.engine;
+    let backend = args.engine.into_backend(db_connection_string);
 
     ux::setup_logging(args.verbose, args.quiet);
 
     match args.command {
         cli::Commands::Peck { } => {
-            commands::peck(&db_connection_string, &engine).await?;
+            commands::peck(&backend).await?;
         }
         cli::Commands::Up { args } => {
             commands::migrate(
-                &db_connection_string,
+                &backend,
                 &migration_directory,
-                &engine,
                 args.current_version_id,
                 args.target_version_id,
                 commands::MigrationDirection::Up,
@@ -45,9 +44,8 @@ async fn main() -> sqlx::Result<()> {
         }
         cli::Commands::Down { args } => {
             commands::migrate(
-                &db_connection_string,
+                &backend,
                 &migration_directory,
-                &engine,
                 args.current_version_id,
                 args.target_version_id,
                 commands::MigrationDirection::Down,
@@ -56,7 +54,7 @@ async fn main() -> sqlx::Result<()> {
             ).await?;
         }
         cli::Commands::Snapshot { } => {
-            commands::snapshot(&db_connection_string, &migration_directory, &engine)?;
+            commands::snapshot(&backend, &migration_directory)?;
         }
     }
 

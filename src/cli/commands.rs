@@ -1,5 +1,4 @@
 use crate::{
-    cli::Engine,
     db,
     directory,
     parser::ResourceCollection,
@@ -8,7 +7,7 @@ use crate::{
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
-use sqlx::{Pool, Postgres, Transaction};
+use sqlx::{Postgres, Transaction};
 
 
 #[derive(PartialEq)]
@@ -43,31 +42,31 @@ impl MigrationDirection {
 
 
 pub async fn peck(
-    db_connection_string: &String,
-    engine: &Engine,
-) -> sqlx::Result<Option<Pool<Postgres>>> {
+    backend: &db::EngineBackend,
+) -> anyhow::Result<()> {
     tracing::info!("Pecking database...");
     
-    db::ensure_table(&engine).await?;
+    backend.ensure_table().await?;
 
     tracing::info!("Pecking successful 🐦");
 
-    return Ok(Some(pool))
+    return Ok(())
 }
 
 
 async fn plan(
-    db_connection_string: &String,
+    backend: &db::EngineBackend,
     migration_directory: &String,
     current_version_id: Option<i64>,
     reference_version_id: Option<i64>,
     direction: &MigrationDirection
-) -> sqlx::Result<(
+) -> anyhow::Result<(
     Transaction<'static, Postgres>,
     Vec<(i64, PathBuf, ResourceCollection)>
 )> {
-    let pool: Pool<Postgres> = peck(&db_connection_string).await?;
-    let mut tx = pool.begin().await?;
+    peck(backend).await?;
+
+    backend.begin();
     
     // Get latest version in records
     let latest_version_from_records: i64 = db::begin(&mut tx).await?
@@ -130,7 +129,7 @@ async fn plan(
 }
 
 pub async fn migrate(
-    db_connection_string: &String,
+    backend: &db::EngineBackend,
     migration_directory: &String,
     current_version_id: Option<i64>,
     target_version_id: Option<i64>,
@@ -200,7 +199,7 @@ pub async fn migrate(
 }
 
 pub fn snapshot(
-    db_connection_string: &String,
+    backend: &db::EngineBackend,
     migration_directory: &String
 ) -> std::io::Result<()> {
     // Check if pg_dump is installed

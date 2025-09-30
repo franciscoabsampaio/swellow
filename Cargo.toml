@@ -16,7 +16,7 @@ path = "src/main.rs"
 anyhow = "1.0.100"
 async-trait = "0.1.89"
 clap = { version = "4.5", features = ["derive", "env"] }
-odbc = "0.17.0"
+odbc-api = "19.0.2"
 phf = { version = "0.13.1", features = ["macros"] }
 # pyo3 = { version = "0.26", features = ["extension-module", "experimental-async"] }
 # pyo3-async-runtimes = { version = "0.26.0", features = ["tokio-runtime"] }
