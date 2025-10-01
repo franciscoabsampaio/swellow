@@ -5,7 +5,6 @@ mod migrations;
 use clap::Parser;
 use cli::{commands, ux};
 use migrations::{directory, parser};
-use sqlx;
 
 /// Entry point for the Swellow CLI tool.
 ///

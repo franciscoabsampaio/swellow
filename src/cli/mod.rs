@@ -2,7 +2,6 @@ pub mod commands;
 use crate::db;
 pub mod ux;
 pub use clap::{Parser, Subcommand, ValueEnum};
-use tokio::net::tcp::ReuniteError;
 
 
 /// User-facing enum to select engine

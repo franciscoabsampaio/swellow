@@ -134,7 +134,7 @@ impl DbEngine for PostgresEngine {
                 $3,
                 $4,
                 'READY',
-                md5($6)
+                md5($5)
             )
             ON CONFLICT (version_id, object_type, object_name_before, object_name_after)
             DO UPDATE SET
