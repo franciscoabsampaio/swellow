@@ -9,6 +9,7 @@ use sha2::{Sha256, Digest};
 use sqlparser;
 use std::{fs, io::{BufReader, Read}, path};
 
+
 pub enum EngineBackend {
     Postgres(PostgresEngine),
     SparkDelta(OdbcEngine),
@@ -137,6 +138,14 @@ impl EngineBackend {
             EngineBackend::SparkIceberg(engine) => engine.commit().await,
         }
     }
+
+    pub fn snapshot(&mut self) -> anyhow::Result<Vec<u8>> {
+        match self {
+            EngineBackend::Postgres(engine) => engine.snapshot(),
+            EngineBackend::SparkDelta(engine) => engine.snapshot(),
+            EngineBackend::SparkIceberg(engine) => engine.snapshot(),
+        }
+    }
 }
 
 
@@ -158,6 +167,7 @@ pub trait DbEngine {
     async fn update_record(&mut self, status: &str, version_id: i64) -> anyhow::Result<()>;
     async fn rollback(&mut self) -> anyhow::Result<()>;
     async fn commit(&mut self) -> anyhow::Result<()>;
+    fn snapshot(&mut self) -> anyhow::Result<Vec<u8>>;
 }
 
 

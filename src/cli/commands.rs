@@ -6,8 +6,6 @@ use crate::{
 };
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process;
-use sqlx::{Postgres, Transaction};
 
 
 #[derive(PartialEq)]
@@ -139,7 +137,7 @@ async fn plan(
 }
 
 pub async fn migrate(
-    backend: &db::EngineBackend,
+    backend: &mut db::EngineBackend,
     migration_directory: &String,
     current_version_id: Option<i64>,
     target_version_id: Option<i64>,
@@ -148,7 +146,7 @@ pub async fn migrate(
     flag_dry_run: bool
 ) -> anyhow::Result<()> {
     let migrations = plan(
-        &mut backend,
+        backend,
         &migration_directory,
         current_version_id,
         target_version_id,
@@ -207,28 +205,17 @@ pub async fn migrate(
 }
 
 pub fn snapshot(
-    backend: &db::EngineBackend,
+    backend: &mut db::EngineBackend,
     migration_directory: &String
 ) -> std::io::Result<()> {
-    // Check if pg_dump is installed
-    if process::Command::new("pg_dump").arg("--version").output()
-        .is_err() {
-        tracing::error!("pg_dump not installed or not in PATH.");
-        std::process::exit(1);
-    }
-
     // Take snapshot
-    let output = process::Command::new("pg_dump")
-        .arg("--schema-only") // only schema, no data
-        .arg("--no-owner")    // drop ownership info
-        .arg("--no-privileges")
-        .arg(db_connection_string)
-        .output()?;
-
-    if !output.status.success() {
-        eprintln!("pg_dump failed: {}", String::from_utf8_lossy(&output.stderr));
-        std::process::exit(1);
-    }
+    let output = match backend.snapshot() {
+        Ok(_out) => _out,
+        Err(e) => {
+            tracing::error!("Snapshot failed: \n\t{}", e);
+            std::process::exit(1);
+        }
+    };
 
     // Store to SQL file with the latest possible version.
     // 1) Get latest version.
@@ -244,7 +231,7 @@ pub fn snapshot(
     // Output snapshot SQL script to directory with updated version
     let new_version_directory = Path::new(migration_directory).join(format!("{}_snapshot", new_version));
     fs::create_dir_all(&new_version_directory)?;
-    fs::write(new_version_directory.join("up.sql"), &output.stdout)?;
+    fs::write(new_version_directory.join("up.sql"), output)?;
     
     tracing::info!("Snapshot complete! 🐦");
     Ok(())

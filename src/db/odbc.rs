@@ -14,8 +14,8 @@ pub enum OdbcCatalog {
 
 /// ODBC-based engines (Spark Delta / Iceberg)
 pub struct OdbcEngine {
-    pub conn_str: String,
-    pub catalog: OdbcCatalog,
+    conn_str: String,
+    catalog: OdbcCatalog,
     env: odbc::Environment,
     // snapshot: 
 }
@@ -70,7 +70,6 @@ impl OdbcEngine {
 }
 
 
-// #[async_trait::async_trait]
 impl DbEngine for OdbcEngine {
     async fn ensure_table(&self) -> anyhow::Result<()> {
         let catalog = self.catalog;
@@ -224,16 +223,14 @@ impl DbEngine for OdbcEngine {
     }
 
     async fn rollback(&mut self) -> anyhow::Result<()> {
-        if let Some(tx) = self.tx.take() {
-            tx.rollback().await?;
-        }
         Ok(())
     }
     
     async fn commit(&mut self) -> anyhow::Result<()> {
-        if let Some(tx) = self.tx.take() {
-            tx.commit().await?;
-        }
         Ok(())
+    }
+
+    fn snapshot(&mut self) -> anyhow::Result<Vec<u8>> {
+        anyhow::bail!("This feature isn't ready.")
     }
 }

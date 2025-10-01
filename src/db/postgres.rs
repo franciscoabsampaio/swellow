@@ -1,9 +1,10 @@
 use std::ops::DerefMut;
 
 use super::{DbEngine, file_checksum};
+use anyhow::anyhow;
 use sqlparser;
 use sqlx::{PgPool, Postgres, Transaction};
-use std::path;
+use std::{path, process};
 
 pub struct PostgresEngine {
     conn_str: String,
@@ -183,5 +184,26 @@ impl DbEngine for PostgresEngine {
             tx.commit().await?;
         }
         Ok(())
+    }
+
+    fn snapshot(&mut self) -> anyhow::Result<Vec<u8>> {
+        // Check if pg_dump is installed
+        if process::Command::new("pg_dump").arg("--version").output()
+            .is_err() {
+            tracing::error!("pg_dump not installed or not in PATH.");
+            std::process::exit(1);
+        }
+        let output = process::Command::new("pg_dump")
+            .arg("--schema-only") // only schema, no data
+            .arg("--no-owner")    // drop ownership info
+            .arg("--no-privileges")
+            .arg(&self.conn_str)
+            .output()?;
+        
+        if output.status.success() {
+            return Ok(output.stdout)
+        } else {
+            anyhow::bail!("pgdump error: {}", String::from_utf8_lossy(&output.stderr))
+        }
     }
 }

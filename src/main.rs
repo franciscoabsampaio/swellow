@@ -54,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
             ).await?;
         }
         cli::Commands::Snapshot { } => {
-            commands::snapshot(&backend, &migration_directory)?;
+            commands::snapshot(&mut backend, &migration_directory)?;
         }
     }
 
