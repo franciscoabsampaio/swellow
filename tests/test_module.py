@@ -16,12 +16,8 @@ def setup(request):
 
     request.addfinalizer(remove_container)
     os.environ["DB_CONN"] = postgres.get_connection_url()
-    # os.environ["DB_HOST"] = postgres.get_container_host_ip()
-    # os.environ["DB_PORT"] = postgres.get_exposed_port(5432)
-    # os.environ["DB_USERNAME"] = postgres.username
-    # os.environ["DB_PASSWORD"] = postgres.password
-    # os.environ["DB_NAME"] = postgres.dbname
 
+# TODO: Test lock already exists
 
 # Test missing up
 def test_missing_up():

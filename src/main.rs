@@ -23,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
 
     let db_connection_string: String = args.db_connection_string;
     let migration_directory: String = args.migration_directory;
-    let backend = args.engine.into_backend(db_connection_string);
+    let mut backend = args.engine.into_backend(db_connection_string)?;
 
     ux::setup_logging(args.verbose, args.quiet);
 
@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
         }
         cli::Commands::Up { args } => {
             commands::migrate(
-                &backend,
+                &mut backend,
                 &migration_directory,
                 args.current_version_id,
                 args.target_version_id,
@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
         }
         cli::Commands::Down { args } => {
             commands::migrate(
-                &backend,
+                &mut backend,
                 &migration_directory,
                 args.current_version_id,
                 args.target_version_id,

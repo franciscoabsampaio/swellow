@@ -1,5 +1,7 @@
-use super::DbEngine;
-use odbc_api as odbc;
+use super::{DbEngine, file_checksum};
+use odbc_api::{self as odbc, Cursor, Nullable, ParameterCollectionRef};
+// use sqlparser;
+use std::path;
 
 
 /// Catalog type for ODBC engines
@@ -9,11 +11,13 @@ pub enum OdbcCatalog {
     Iceberg,
 }
 
+
 /// ODBC-based engines (Spark Delta / Iceberg)
 pub struct OdbcEngine {
     pub conn_str: String,
     pub catalog: OdbcCatalog,
-    env: odbc::Environment
+    env: odbc::Environment,
+    // snapshot: 
 }
 
 
@@ -34,16 +38,42 @@ impl OdbcEngine {
         
         Ok(conn)
     }
+
+    /// Executes a statement, returning nothing
+    fn _execute(&self, sql: &str, params: impl ParameterCollectionRef) -> anyhow::Result<()> {
+        let conn = self.connect()?;
+        
+        conn.execute(sql, params, Some(30))?;
+
+        Ok(())
+    }
+
+    /// Fetch all rows for a single i64 column
+    fn fetch_all_i64(&mut self, sql: &str) -> anyhow::Result<Vec<i64>> {
+        let conn = self.connect()?;
+        
+        let mut results = Vec::new();
+        
+        let cursor_opt = conn.execute(sql, (), Some(30))?;
+        
+        if let Some(mut cursor) = cursor_opt {
+            while let Some(mut row) = cursor.next_row()? {
+                let mut buf = Nullable::<i64>::null();
+                row.get_data(1, &mut buf)?;
+                if let Some(value) = buf.into_opt() {
+                    results.push(value);
+                }
+            }
+        }
+        Ok(results)
+    }
 }
 
 
 // #[async_trait::async_trait]
 impl DbEngine for OdbcEngine {
     async fn ensure_table(&self) -> anyhow::Result<()> {
-        let conn_str = self.conn_str.clone();
         let catalog = self.catalog;
-
-        // tokio::task::spawn_blocking(move || {
         
         let using_clause = match catalog {
             OdbcCatalog::Delta => "DELTA",
@@ -67,34 +97,143 @@ impl DbEngine for OdbcEngine {
             using_clause
         );
 
-        conn.execute(&create_table_sql, (), Some(30))?;
+        self._execute(&create_table_sql, ())?;
 
         Ok(())
     }
 
-    async fn begin(&mut self) -> anyhow::Result<Option<i64>> {
+    async fn begin(&mut self) -> anyhow::Result<()> {
+        self.connect()?;
+        Ok(())
+    }
 
-        let mut tx = ::connect(&self.conn_str).await?.begin().await?;
+    async fn execute(&mut self, sql: &str) -> anyhow::Result<()> {
+        self._execute(sql, ())?;
+        Ok(())
+    }
 
-        tracing::info!("Acquiring lock on records table...");
-        // Acquire a lock on the swellow_records table
-        // To ensure no other migration process is underway.
-        sqlx::query("LOCK TABLE swellow_records IN ACCESS EXCLUSIVE MODE;")
-            .execute(&mut *tx)
-            .await?;
+    /// Fetch an optional single column value
+    async fn fetch_optional_i64(&mut self, sql: &str) -> anyhow::Result<Option<i64>> {
+        let conn = self.connect()?;
 
-        tracing::info!("Getting latest migration version from records...");
-        let version: Option<i64> = sqlx::query_scalar("
-        SELECT
-            MAX(version_id) version_id
-        FROM swellow_records
-        WHERE status IN ('APPLIED', 'TESTED')
-        ")
-            .fetch_one(&mut *tx)
-            .await?;
+        let cursor_opt = conn.execute(sql, (), Some(30))?;
+        
+        if let Some(mut cursor) = cursor_opt {
+            if let Some(mut row) = cursor.next_row()? {
+                let mut buf = Nullable::<i64>::null();
+                row.get_data(1, &mut buf)?;
+        
+                return Ok(buf.into_opt());
+            }
+        }
 
-        self.tx = Some(tx);
+        Ok(None)
+    }
 
-        return Ok(version)
+    async fn acquire_lock(&mut self) -> anyhow::Result<()> {
+        let query = r#"
+            MERGE INTO swellow_records t
+            USING (
+                SELECT 0 AS version_id,
+                    'LOCK' AS object_type,
+                    'LOCK' AS object_name_before,
+                    'LOCK' AS object_name_after,
+                    'LOCKED' AS status,
+                    'LOCK' AS checksum
+            ) s
+            ON t.version_id = s.version_id
+            AND t.object_type = s.object_type
+            AND t.object_name_before = s.object_name_before
+            AND t.object_name_after = s.object_name_after
+            WHEN NOT MATCHED THEN
+            INSERT *
+        "#;
+        
+        if self.fetch_optional_i64(query).await?.is_none() {
+            anyhow::bail!("Lock already exists!")
+        }
+
+        return Ok(())
+    }
+
+    async fn disable_records(&mut self, current_version_id: i64) -> anyhow::Result<()> {
+        self._execute(
+            r#"
+            UPDATE swellow_records
+            SET status='DISABLED'
+            WHERE version_id > ?
+            "#,
+            &current_version_id
+        )?;
+
+        Ok(())
+    }
+
+    async fn upsert_record(
+        &mut self,
+        object_type: &sqlparser::ast::ObjectType,
+        object_name_before: &String,
+        object_name_after: &String,
+        version_id: i64,
+        file_path: &path::PathBuf
+    ) -> anyhow::Result<()> {
+        self._execute(&format!(r#"
+            INSERT INTO swellow_records(
+                object_type,
+                object_name_before,
+                object_name_after,
+                version_id,
+                status,
+                checksum
+            )
+            VALUES (
+                {},
+                {},
+                {},
+                {},
+                'READY',
+                md5({})
+            )
+            ON CONFLICT (version_id, object_type, object_name_before, object_name_after)
+            DO UPDATE SET
+                status = EXCLUDED.status,
+                checksum = EXCLUDED.checksum
+        "#,
+            object_type.to_string(),
+            object_name_before.to_string(),
+            object_name_after.to_string(),
+            version_id,
+            file_checksum(&file_path)?,
+        ), ())?;
+
+        Ok(())
+    }
+
+    async fn update_record(&mut self, status: &str, version_id: i64) -> anyhow::Result<()> {
+        self._execute(&format!(
+            r#"
+            UPDATE swellow_records
+            SET
+                status={}
+            WHERE
+                version_id={}
+            "#, status, version_id
+        ), ())?;
+        
+        Ok(())
+    }
+
+    async fn rollback(&mut self) -> anyhow::Result<()> {
+        if let Some(tx) = self.tx.take() {
+            tx.rollback().await?;
+        }
+        Ok(())
+    }
+    
+    async fn commit(&mut self) -> anyhow::Result<()> {
+        if let Some(tx) = self.tx.take() {
+            tx.commit().await?;
+        }
+        Ok(())
     }
 }

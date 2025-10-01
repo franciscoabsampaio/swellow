@@ -55,34 +55,44 @@ pub async fn peck(
 
 
 async fn plan(
-    backend: &db::EngineBackend,
+    backend: &mut db::EngineBackend,
     migration_directory: &String,
     current_version_id: Option<i64>,
     reference_version_id: Option<i64>,
     direction: &MigrationDirection
-) -> anyhow::Result<(
-    Transaction<'static, Postgres>,
-    Vec<(i64, PathBuf, ResourceCollection)>
-)> {
+) -> anyhow::Result<Vec<(i64, PathBuf, ResourceCollection)>> {
     peck(backend).await?;
 
+    tracing::info!("Beginning transaction...");
     backend.begin();
     
+    // Acquire a lock on the swellow_records table
+    // To ensure no other migration process is underway.
+    tracing::info!("Acquiring lock on records table...");
+    backend.acquire_lock();
+    
     // Get latest version in records
-    let latest_version_from_records: i64 = db::begin(&mut tx).await?
+    tracing::info!("Getting latest migration version from records...");
+    let latest_version_from_records: i64 = backend.fetch_optional_i64("
+        SELECT MAX(version_id) version_id
+        FROM swellow_records
+        WHERE status IN ('APPLIED', 'TESTED')
+    ").await?
         .unwrap_or(match direction {
             // If unavailable, set to minimum/maximum
             MigrationDirection::Up => 0,
             MigrationDirection::Down => i64::MAX
         }
     );
+    tracing::info!("Latest version resolved from records: {}", latest_version_from_records);
 
     // Set the current migration version (default to user input)
     let current_version_id: i64 = current_version_id
         // If unavailable, get from table records
         .unwrap_or(latest_version_from_records);
 
-    db::disable_records(&mut tx, current_version_id).await?;
+    // Disable records with versions greater than the user-specified starting version
+    backend.disable_records(current_version_id);
 
     // Set direction_string, from_version, and to_version depending on direction
     let (
@@ -125,7 +135,7 @@ async fn plan(
     // Show user the plans.
     ux::show_migration_changes(&migrations, &direction);
 
-    Ok((tx, migrations))
+    Ok(migrations)
 }
 
 pub async fn migrate(
@@ -136,9 +146,9 @@ pub async fn migrate(
     direction: MigrationDirection,
     flag_plan: bool,
     flag_dry_run: bool
-) -> sqlx::Result<()> {
-    let (mut tx, migrations) = plan(
-        &db_connection_string,
+) -> anyhow::Result<()> {
+    let migrations = plan(
+        &mut backend,
         &migration_directory,
         current_version_id,
         target_version_id,
@@ -159,8 +169,7 @@ pub async fn migrate(
                     if resource.name_before == "-1" && resource.name_after == "-1" {
                         continue
                     }
-                    db::upsert_record(
-                        &mut tx,
+                    backend.upsert_record(
                         &resource.object_type,
                         &resource.name_before,
                         &resource.name_after,
@@ -176,11 +185,10 @@ pub async fn migrate(
                 direction.verb(),
                 version_id
             );
-            db::execute_sql_script(&mut tx, &file_path).await?;
+            backend.execute_sql_script(&file_path).await?;
 
             // Update records' status
-            db::update_record(
-                &mut tx,
+            backend.update_record(
                 &direction,
                 version_id,
             ).await?;
@@ -188,10 +196,10 @@ pub async fn migrate(
     }
 
     if flag_dry_run {
-        tx.rollback().await?;
+        backend.rollback().await?;
         tracing::info!("Dry run completed.");
     } else {
-        tx.commit().await?;
+        backend.commit().await?;
         tracing::info!("Migration completed.");
     }
 

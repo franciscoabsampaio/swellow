@@ -1,14 +1,5 @@
 # SparkDeltaDSN
 
-use odbc::*;
-use std::error::Error;
-
-fn main() -> Result<(), Box<dyn Error>> {
-    let env = create_environment_v3().map_err(|e| e.unwrap())?;
-    let conn = env.connect("SparkDeltaDSN", "user", "password")?;
-
-    let table = "delta.default.my_table";
-
     // 1️⃣ Capture current version
     let version: i64 = conn
         .execute(&format!("DESCRIBE HISTORY {} LIMIT 1", table), ())?
@@ -19,7 +10,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let result = (|| -> Result<(), Box<dyn Error>> {
         conn.execute(&format!("INSERT INTO {} VALUES (1, 'foo')", table), ())?;
         conn.execute(&format!("INSERT INTO {} VALUES (2, 'bar')", table), ())?;
-        Ok(())
     })();
 
     // 3️⃣ Rollback on error
@@ -29,21 +19,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         ), ())?;
         println!("Rolled back to Delta version {}", version);
     }
-
-    Ok(())
 }
 
 
 # SparkIcebergDSN
-
-use odbc::*;
-use std::error::Error;
-
-fn main() -> Result<(), Box<dyn Error>> {
-    let env = create_environment_v3().map_err(|e| e.unwrap())?;
-    let conn = env.connect("SparkIcebergDSN", "user", "password")?;
-
-    let table = "iceberg.default.my_table";
 
     // 1️⃣ Capture current version
     let snapshot_version: String = conn
@@ -54,7 +33,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let result = (|| -> Result<(), Box<dyn Error>> {
         conn.execute(&format!("INSERT INTO {} VALUES (1, 'x')", table), ())?;
         conn.execute(&format!("INSERT INTO {} VALUES (2, 'y')", table), ())?;
-        Ok(())
     })();
 
     // 3️⃣ Rollback using snapshot
@@ -64,6 +42,4 @@ fn main() -> Result<(), Box<dyn Error>> {
         ), ())?;
         println!("Rolled back to snapshot version {}", snapshot_version);
     }
-
-    Ok(())
 }
