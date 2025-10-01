@@ -10,7 +10,7 @@ def db_backend(request):
     backend = request.param
 
     if backend == "postgres":
-        container = PostgresContainer("postgres:15")
+        container = PostgresContainer("postgres:latest")
         container.start()
         conn_url = container.get_connection_url()
 
@@ -50,7 +50,7 @@ def db_backend(request):
 # TODO: Test lock already exists
 
 # Test missing up
-def test_missing_up():
+def test_missing_up(db_backend):
     with pytest.raises(FileNotFoundError):
         swellow.up(
             db=os.getenv("DB_CONN"),
@@ -58,7 +58,7 @@ def test_missing_up():
         )
 
 # Test missing down
-def test_missing_down():
+def test_missing_down(db_backend):
     swellow.up(
         db=os.getenv("DB_CONN"),
         directory="./tests/migrations/missing_down"
@@ -70,7 +70,7 @@ def test_missing_down():
         )
 
 # Test migration+rollback:
-def test_migrate_and_rollback():
+def test_migrate_and_rollback(db_backend):
     # Migrate and rollback to/from progressively higher versions.
     for i in range(3):
         swellow.up(

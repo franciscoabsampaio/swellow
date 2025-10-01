@@ -2,5 +2,4 @@
 /migrations
 /target
 /venv
-**/__pycache__/
 .env
