@@ -30,7 +30,7 @@ impl OdbcEngine {
         })
     }
 
-    fn connect(&self) -> anyhow::Result<odbc::Connection> {
+    fn connect(&self) -> anyhow::Result<odbc::Connection<'_>> {
         let conn = self.env.connect_with_connection_string(
             &self.conn_str,
             odbc::ConnectionOptions::default()

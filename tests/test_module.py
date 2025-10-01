@@ -2,20 +2,50 @@ import os
 import pytest
 import swellow
 from testcontainers.postgres import PostgresContainer
+from testcontainers.core.container import DockerContainer
 
 
-postgres = PostgresContainer("postgres:latest")
+@pytest.fixture(scope="module", params=["postgres", "spark-delta", "spark-iceberg"])
+def db_backend(request):
+    backend = request.param
 
+    if backend == "postgres":
+        container = PostgresContainer("postgres:15")
+        container.start()
+        conn_url = container.get_connection_url()
 
-@pytest.fixture(scope="module", autouse=True)
-def setup(request):
-    postgres.start()
+    elif backend == "spark-delta":
+        container = (
+            DockerContainer("bitnami/spark:latest")
+            .with_exposed_ports(10000)  # Hive Thrift Server port
+            .with_env("SPARK_MODE", "thrift-server")
+            .with_env("SPARK_PACKAGES", "io.delta:delta-core_2.12:2.4.0")
+        )
+        container.start()
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(10000)
+        conn_url = f"jdbc:hive2://{host}:{port}/default"
 
-    def remove_container():
-        postgres.stop()
+    elif backend == "spark-iceberg":
+        container = (
+            DockerContainer("bitnami/spark:latest")
+            .with_exposed_ports(10000)
+            .with_env("SPARK_MODE", "thrift-server")
+            .with_env("SPARK_PACKAGES", "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0")
+        )
+        container.start()
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(10000)
+        conn_url = f"jdbc:hive2://{host}:{port}/default"
 
-    request.addfinalizer(remove_container)
-    os.environ["DB_CONN"] = postgres.get_connection_url()
+    else:
+        raise ValueError(f"Unknown backend {backend}")
+
+    os.environ["DB_CONN"] = conn_url
+
+    yield backend
+
+    container.stop()
 
 # TODO: Test lock already exists
 
