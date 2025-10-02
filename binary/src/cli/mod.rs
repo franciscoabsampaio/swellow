@@ -16,8 +16,8 @@ impl Engine {
     pub fn into_backend(self, conn_str: String) -> anyhow::Result<db::EngineBackend> {
         match self {
             Engine::Postgres => Ok(db::EngineBackend::Postgres(db::PostgresEngine::new(conn_str))),
-            Engine::SparkDelta => Ok(db::EngineBackend::SparkDelta(db::OdbcEngine::new(conn_str, db::OdbcCatalog::Delta)?)),
-            Engine::SparkIceberg => Ok(db::EngineBackend::SparkIceberg(db::OdbcEngine::new(conn_str, db::OdbcCatalog::Iceberg)?)),
+            Engine::SparkDelta => Ok(db::EngineBackend::SparkDelta(db::SparkEngine::new(conn_str, db::SparkCatalog::Delta)?)),
+            Engine::SparkIceberg => Ok(db::EngineBackend::SparkIceberg(db::SparkEngine::new(conn_str, db::SparkCatalog::Iceberg)?)),
         }
     }
 }

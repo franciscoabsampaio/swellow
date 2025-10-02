@@ -1,6 +1,6 @@
 mod spark;
 mod postgres;
-pub use spark::SparkEngine;
+pub use spark::{SparkEngine, SparkCatalog};
 pub use postgres::PostgresEngine;
 
 use crate::commands::MigrationDirection;
