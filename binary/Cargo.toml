@@ -1,7 +1,10 @@
 [package]
-edition = "2024"
 name = "swellow"
 version = "0.2.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "swellow"
@@ -16,7 +19,7 @@ phf = { version = "0.13.1", features = ["macros"] }
 # pyo3 = { version = "0.26", features = ["extension-module", "experimental-async"] }
 # pyo3-async-runtimes = { version = "0.26.0", features = ["tokio-runtime"] }
 sha2 = "0.10"
-spark-connect = { path = "../spark-connect" }
+spark-connect-sql = { path = "../spark-connect-sql" }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "macros"] }
 sqlparser = "0.58"
 tokio = { version = "1.47", features = ["rt-multi-thread", "macros"] }

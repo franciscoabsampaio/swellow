@@ -1,14 +1,17 @@
 [workspace]
 members = [
     "binary",
-    "spark-connect"
+    "spark-connect-sql"
 ]
 
 [workspace.package]
-edition = "2024"
-license = "Apache 2.0"
 authors = ["Francisco A. B. Sampaio <franciscoabsampaio@gmail.com>"]
+edition = "2024"
+license = "Apache-2.0"
 repository = "https://github.com/franciscoabsampaio/swellow"
+
+[workspace.dependencies]
+tokio = { version = "1.47", features = ["rt-multi-thread", "macros"] }
 
 [profile.release]
 codegen-units = 1 # Improves optimizations
