@@ -1,7 +1,6 @@
 [package]
 name = "swellow"
-version = "0.1.2"
-edition = "2024"
+version = "0.2.0"
 
 [[bin]]
 name = "swellow"
@@ -22,9 +21,3 @@ sqlparser = "0.58"
 tokio = { version = "1.47", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
-
-[profile.release]
-codegen-units = 1 # Improves optimizations
-lto = true
-opt-level = "z"   # "z" for size, "3" for maximum performance
-panic = "abort"   # Abort on panic instead of unwinding — smaller binaries and slightly faster
