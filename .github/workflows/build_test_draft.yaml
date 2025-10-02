@@ -141,11 +141,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: ${{ env.PROJECT_NAME }}-*
-          path: ${{ env.PROJECT_NAME }}/src/python/bin/
+          path: ${{ env.PROJECT_NAME }}/bin/
       - name: Make Rust binaries executable
         shell: bash
         run: |
-          chmod +x ${{ env.PROJECT_NAME }}/src/python/bin/*/${{ env.PROJECT_NAME }}*
+          chmod +x ${{ env.PROJECT_NAME }}/bin/*/${{ env.PROJECT_NAME }}*
 
       - name: Build package
         shell: bash

@@ -27,5 +27,5 @@ test = [
 
 # Hatch (build tool)
 [tool.hatch.build.targets.wheel]
-packages = ["src/swellow"]
-include-files = ["src/swellow/bin/*"]
+packages = ["swellow"]
+include-files = ["swellow/bin/*"]
