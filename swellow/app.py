@@ -64,6 +64,7 @@ def resolve_directory(f):
 def up(
     db: str,
     directory: str,
+    engine: str,
     current_version_id: Optional[int] = None,
     target_version_id: Optional[int] = None,
     plan: bool = False,
@@ -83,7 +84,7 @@ def up(
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    args = ["--db", db, "--dir", directory, "up"]
+    args = ["--db", db, "--dir", directory, "--engine", engine, "up"]
     if current_version_id is not None:
         args += ["--current-version-id", str(current_version_id)]
     if target_version_id is not None:
@@ -99,6 +100,7 @@ def up(
 def down(
     db: str,
     directory: str,
+    engine: str,
     current_version_id: Optional[int] = None,
     target_version_id: Optional[int] = None,
     plan: bool = False,
@@ -118,7 +120,7 @@ def down(
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    args = ["--db", db, "--dir", directory, "down"]
+    args = ["--db", db, "--dir", directory, "--engine", engine, "down"]
     if current_version_id is not None:
         args += ["--current-version-id", str(current_version_id)]
     if target_version_id is not None:
@@ -131,7 +133,7 @@ def down(
 
 
 @resolve_directory
-def peck(db: str, directory: str) -> int:
+def peck(db: str, directory: str, engine: str) -> int:
     """
     Verify connectivity to the database and migration directory.
 
@@ -142,11 +144,11 @@ def peck(db: str, directory: str) -> int:
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    return _run_swellow("--db", db, "--dir", directory, "peck")
+    return _run_swellow("--db", db, "--dir", directory, "--engine", engine, "peck")
 
 
 @resolve_directory
-def snapshot(db: str, directory: str) -> int:
+def snapshot(db: str, directory: str, engine: str) -> int:
     """
     Create a snapshot of the current migration directory state.
 
@@ -157,4 +159,4 @@ def snapshot(db: str, directory: str) -> int:
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    return _run_swellow("--db", db, "--dir", directory, "snapshot")
+    return _run_swellow("--db", db, "--dir", directory, "--engine", engine, "snapshot")

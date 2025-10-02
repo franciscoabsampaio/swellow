@@ -10,6 +10,7 @@ def main():
     )
     parser.add_argument("--db", required=True, help="Database connection string")
     parser.add_argument("--dir", required=True, help="Directory containing all migrations")
+    parser.add_argument("--engine", required=True, help="Database / catalog engine.", default="postgres")
     parser.add_argument("-v", "--verbose", action="count", default=0)
     parser.add_argument("-q", "--quiet", action="store_true")
 
@@ -35,13 +36,13 @@ def main():
 
     try:
         if args.command == "peck":
-            return_code = peck(args.db, args.dir)
+            return_code = peck(args.db, args.dir, args.engine)
         elif args.command == "up":
-            return_code = up(args.db, args.dir, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
+            return_code = up(args.db, args.dir, args.engine, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
         elif args.command == "down":
-            return_code = down(args.db, args.dir, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
+            return_code = down(args.db, args.dir, args.engine, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
         elif args.command == "snapshot":
-            return_code = snapshot(args.db, args.dir)
+            return_code = snapshot(args.db, args.dir, args.engine)
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         return_code = 2
