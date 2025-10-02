@@ -6,24 +6,24 @@ use std::path;
 
 /// Catalog type for ODBC engines
 #[derive(Clone, Copy)]
-pub enum OdbcCatalog {
+pub enum SparkCatalog {
     Delta,
     Iceberg,
 }
 
 
 /// ODBC-based engines (Spark Delta / Iceberg)
-pub struct OdbcEngine {
+pub struct SparkEngine {
     conn_str: String,
-    catalog: OdbcCatalog,
+    catalog: SparkCatalog,
     env: odbc::Environment,
     // snapshot: 
 }
 
 
-impl OdbcEngine {
-    pub fn new(conn_str: String, catalog: OdbcCatalog) -> anyhow::Result<Self, odbc_api::Error> {
-        return Ok(OdbcEngine {
+impl SparkEngine {
+    pub fn new(conn_str: String, catalog: SparkCatalog) -> anyhow::Result<Self, odbc_api::Error> {
+        return Ok(SparkEngine {
             conn_str: conn_str,
             catalog: catalog,
             env: odbc::Environment::new()?
@@ -70,13 +70,13 @@ impl OdbcEngine {
 }
 
 
-impl DbEngine for OdbcEngine {
+impl DbEngine for SparkEngine {
     async fn ensure_table(&self) -> anyhow::Result<()> {
         let catalog = self.catalog;
         
         let using_clause = match catalog {
-            OdbcCatalog::Delta => "DELTA",
-            OdbcCatalog::Iceberg => "ICEBERG",
+            SparkCatalog::Delta => "DELTA",
+            SparkCatalog::Iceberg => "ICEBERG",
         };
 
         let create_table_sql = format!(

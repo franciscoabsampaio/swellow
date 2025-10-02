@@ -1,6 +1,6 @@
-mod odbc;
+mod spark;
 mod postgres;
-pub use odbc::{OdbcEngine, OdbcCatalog};
+pub use spark::SparkEngine;
 pub use postgres::PostgresEngine;
 
 use crate::commands::MigrationDirection;
@@ -12,8 +12,8 @@ use std::{fs, io::{BufReader, Read}, path};
 
 pub enum EngineBackend {
     Postgres(PostgresEngine),
-    SparkDelta(OdbcEngine),
-    SparkIceberg(OdbcEngine),
+    SparkDelta(SparkEngine),
+    SparkIceberg(SparkEngine),
 }
 
 impl EngineBackend {
