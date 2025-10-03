@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "binary",
+    "swellow-rs",
     "spark-connect-sql"
 ]
 

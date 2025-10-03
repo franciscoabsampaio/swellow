@@ -16,23 +16,23 @@ def db_backend(request):
 
     elif backend == "spark-delta":
         container = (
-            DockerContainer("franciscoabsampaio/spark:latest")
-            .with_exposed_ports(10000)  # Hive Thrift Server port
+            DockerContainer("franciscoabsampaio/spark-connect:latest")
+            .with_exposed_ports(15002)  # Hive Thrift Server port
         )
         container.start()
         host = container.get_container_host_ip()
-        port = container.get_exposed_port(10000)
-        conn_url = f"Driver=/opt/cloudera/hiveodbc/lib/64/libclouderahiveodbc64.so;Host={host};Port={port}"
+        port = container.get_exposed_port(15002)
+        conn_url = f"sc://{host}:{port}/;token=ABCDEFG;user_agent=some_agent;user_id=user123"
 
     elif backend == "spark-iceberg":
         container = (
-            DockerContainer("trivadis/apache-spark-thriftserver:3.3.2-hadoop3.3-java17")
-            .with_exposed_ports(10000)
+            DockerContainer("franciscoabsampaio/spark-connect:latest")
+            .with_exposed_ports(15002)
         )
         container.start()
         host = container.get_container_host_ip()
-        port = container.get_exposed_port(10000)
-        conn_url = f"jdbc:hive2://{host}:{port}/default;user=guest;password=guest;"
+        port = container.get_exposed_port(15002)
+        conn_url = f"sc://{host}:{port}/;token=ABCDEFG;user_agent=some_agent;user_id=user123"
 
     else:
         raise ValueError(f"Unknown backend {backend}")
