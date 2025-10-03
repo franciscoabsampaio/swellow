@@ -22,7 +22,10 @@ class HelpFormatterRedirect(argparse.HelpFormatter):
         Overrides the main help method to extract argument data only.
         """
         from .app import _run_swellow
-        _run_swellow(*sys.argv[1:], capture_output=False)
+        try:
+            _run_swellow(*sys.argv[1:], capture_output=False)
+        except SwellowError as e:
+            print(e, file=sys.stderr)
         return ""
 
 
