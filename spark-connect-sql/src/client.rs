@@ -1,22 +1,15 @@
-//! Minimal SparkConnect gRPC client for executing SQL queries and fetching Arrow batches
-
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
-use tonic::transport::Channel;
-use tonic::codegen::StdError;
-use tonic::body::BoxBody;
-use tonic::client::GrpcService;
-use tonic::codegen::Bytes;
+use crate::builder::ChannelBuilder;
+use crate::error::SparkError;
+use crate::middleware::HeadersMiddleware;
+use crate::spark::execute_plan_response::ResponseType;
+use crate::spark::spark_connect_service_client::SparkConnectServiceClient;
+use crate::spark;
 
 use arrow::record_batch::RecordBatch;
 use arrow_ipc::reader::StreamReader;
-
-use crate::builder::ChannelBuilder;
-use crate::error::SparkError;
-use crate::spark::spark_connect_service_client::SparkConnectServiceClient;
-use crate::spark::execute_plan_response::ResponseType;
-use crate::spark;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tonic::transport::Channel;
 
 /// The minimal Spark client, used internally by `SparkSession`.
 #[derive(Clone, Debug)]
@@ -32,7 +25,7 @@ impl SparkClient {
         builder: ChannelBuilder,
     ) -> Self {
         Self {
-            session_id: builder.session_id.clone(),
+            session_id: builder.session_id.to_string(),
             stub,
             builder,
         }
@@ -41,6 +34,21 @@ impl SparkClient {
     /// Returns the session ID
     pub fn session_id(&self) -> String {
         self.session_id.clone()
+    }
+
+    pub async fn analyze(
+        &self,
+        analyze: spark::analyze_plan_request::Analyze,
+    ) -> Result<spark::AnalyzePlanResponse, SparkError> {
+        let req = spark::AnalyzePlanRequest {
+            session_id: self.session_id.clone(),
+            user_context: None,
+            analyze: Some(analyze),
+        };
+
+        let mut client = self.stub.write().await;
+        let resp = client.analyze_plan(req).await?.into_inner();
+        Ok(resp)
     }
 
     /// Execute a SQL command and fetch Arrow batches
@@ -84,29 +92,20 @@ impl SparkClient {
 
         Ok(batches)
     }
-}
 
-/// A simple wrapper to add headers middleware (used internally)
-#[derive(Clone, Debug)]
-pub struct HeadersMiddleware<T>(pub T);
+    pub async fn interrupt_request(
+        &self,
+        interrupt_type: spark::interrupt_request::InterruptType,
+        op_id: Option<String>,
+    ) -> Result<spark::InterruptResponse, SparkError> {
+        let req = spark::InterruptRequest {
+            session_id: self.session_id.clone(),
+            interrupt_type: Some(interrupt_type.into()),
+            operation_id: op_id,
+        };
 
-impl<T> GrpcService<BoxBody> for HeadersMiddleware<T>
-where
-    T: GrpcService<BoxBody>,
-{
-    type ResponseBody = T::ResponseBody;
-    type Error = T::Error;
-    type Future = T::Future;
-
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.0.poll_ready(cx)
-    }
-
-    fn call(&mut self, req: tonic::Request<BoxBody>) -> Self::Future {
-        // Optionally inject headers here if needed
-        self.0.call(req)
+        let mut client = self.stub.write().await;
+        let resp = client.interrupt(req).await?.into_inner();
+        Ok(resp)
     }
 }
