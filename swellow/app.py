@@ -28,7 +28,7 @@ def _swellow_bin() -> Path:
 
 
 
-def _run_swellow(*args) -> int:
+def _run_swellow(*args, capture_output=True) -> int:
     """
     Run the swellow Rust binary with args, parse output, and raise custom errors.
     Returns exit code if successful, otherwise raises SwellowError or subclass.
@@ -37,7 +37,7 @@ def _run_swellow(*args) -> int:
     if not bin_path.exists():
         raise FileNotFoundError(f"Swellow binary not found at {bin_path}")
     cmd = [bin_path, *args]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    result = subprocess.run(cmd, capture_output=capture_output, text=True, check=False)
     stdout = result.stdout or ""
     stderr = result.stderr or ""
     
