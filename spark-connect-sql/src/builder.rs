@@ -7,11 +7,9 @@ use std::str::FromStr;
 use url::Url;
 use uuid::Uuid;
 
-
 pub(crate) type Host = String;
 pub(crate) type Port = u16;
 pub(crate) type UrlParse = (Host, Port, Option<HashMap<String, String>>);
-
 
 /// ChannelBuilder validates a connection string
 /// based on the requirements from [Spark Documentation](https://github.com/apache/spark/blob/master/connector/connect/docs/client-connection-string.md)

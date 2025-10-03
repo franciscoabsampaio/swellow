@@ -1,6 +1,6 @@
-use std::{collections::HashMap, str::FromStr, task::{Context, Poll}};
-use futures_util::future::BoxFuture;
 use http_body::Body;
+use futures_util::future::BoxFuture;
+use std::{collections::HashMap, str::FromStr, task::{Context, Poll}};
 use tonic::codegen::http::{Request, HeaderName, HeaderValue};
 use tower::Service;
 
@@ -55,7 +55,9 @@ where
     }
 
     fn call(&mut self, mut req: Request<B>) -> Self::Future {
-        let mut inner = std::mem::replace(&mut self.inner, self.inner.clone());
+        let clone = self.inner.clone();
+        let mut inner = std::mem::replace(&mut self.inner, clone);
+
         let headers = self.headers.clone();
 
         Box::pin(async move {

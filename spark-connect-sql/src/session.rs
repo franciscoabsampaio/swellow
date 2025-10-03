@@ -1,7 +1,8 @@
 use crate::builder::ChannelBuilder;
-use crate::client::{SparkClient, deserialize_arrow};
+use crate::client::SparkClient;
 use crate::error::SparkError;
 use crate::middleware::HeadersLayer;
+use crate::spark;
 use crate::spark::spark_connect_service_client::SparkConnectServiceClient;
 
 use arrow::record_batch::RecordBatch;
@@ -71,8 +72,8 @@ impl SparkSession {
 
     /// Execute a SQL query and return Arrow record batches directly.
     pub async fn sql(&self, query: &str) -> Result<Vec<RecordBatch>, SparkError> {
-        let sql_cmd = crate::spark::command::CommandType::SqlCommand(
-            crate::spark::SqlCommand {
+        let sql_cmd = spark::command::CommandType::SqlCommand(
+            spark::SqlCommand {
                 sql: query.to_string(),
                 args: Default::default(),
                 pos_args: vec![],
@@ -80,31 +81,20 @@ impl SparkSession {
         );
 
         // Execute command and fetch response
-        let resp = self.client.clone()
+        let batches = self.client.clone()
             .execute_command_and_fetch(sql_cmd.into())
             .await?;
 
-        // Deserialize Arrow batches
-        let mut batches = Vec::new();
-        for batch_bytes in resp.batches {
-            batches.push(deserialize_arrow(&batch_bytes)?);
-        }
-
         Ok(batches)
-    }
-
-    /// Return the Spark version for this session
-    pub async fn version(&self) -> Result<String, SparkError> {
-        let analyze = crate::spark::analyze_plan_request::Analyze::SparkVersion(
-            crate::spark::analyze_plan_request::SparkVersion {},
-        );
-        self.client.clone().analyze(analyze).await?.spark_version()
     }
 
     /// Interrupt all running operations
     pub async fn interrupt_all(&self) -> Result<Vec<String>, SparkError> {
         let resp = self.client
-            .interrupt_request(crate::spark::interrupt_request::InterruptType::All, None)
+            .interrupt_request(
+                spark::interrupt_request::InterruptType::All,
+                None
+            )
             .await?;
         Ok(resp.interrupted_ids)
     }
@@ -113,11 +103,22 @@ impl SparkSession {
     pub async fn interrupt_operation(&self, op_id: &str) -> Result<Vec<String>, SparkError> {
         let resp = self.client
             .interrupt_request(
-                crate::spark::interrupt_request::InterruptType::OperationId,
+                spark::interrupt_request::InterruptType::OperationId,
                 Some(op_id.to_string()),
             )
             .await?;
         Ok(resp.interrupted_ids)
+    }
+
+    /// The version of Spark on which this application is running.
+    pub async fn version(&self) -> Result<String, SparkError> {
+        let version = spark::analyze_plan_request::Analyze::SparkVersion(
+            spark::analyze_plan_request::SparkVersion {},
+        );
+
+        let mut client = self.client.clone();
+        
+        Ok(client.analyze(version).await?.spark_version()?)
     }
 }
 

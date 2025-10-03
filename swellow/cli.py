@@ -7,7 +7,6 @@ class HelpFormatterRedirect(argparse.HelpFormatter):
     """
     Overrides the default formatter by a call to the Rust binary.
     """
-
     def __init__(
         self,
         prog,

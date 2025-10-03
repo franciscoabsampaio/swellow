@@ -12,11 +12,18 @@ arrow = "56.2.0"
 arrow-ipc = "56.2.0"
 futures-util = "0.3.31"
 http-body = "1.0.1"
+prost = "0.14.1"
+prost-types = "0.14.1"
+regex = "1.11.3"
 tokio = { workspace = true }
-tonic = "0.14.2"
+tonic = { version = "0.14.2" }
+tonic-prost = "0.14.2"
 tower = "0.5.2"
 url = "2.5.7"
-uuid = {version = "1.18.1", features = ["v4"]}
+uuid = { version = "1.18.1", features = ["v4"] }
+
+[build-dependencies]
+tonic-prost-build = "0.14.2"
 
 [features]
 tls = []
