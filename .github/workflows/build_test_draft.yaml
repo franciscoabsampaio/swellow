@@ -36,6 +36,26 @@ jobs:
           git tag -f v${{ steps.get_version.outputs.version }}
           git push -f origin v${{ steps.get_version.outputs.version }}
 
+  test-spark-connect-sql:
+    runs-on: ubuntu-latest
+    services:
+      docker:
+        image: docker:20.10.24-dind
+        options: --privileged
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Spark Connect Server container instance
+        run: docker run -p 15002:15002 ${{ github.repository_owner }}/spark-connect
+      
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Test crate spark-connect-sql
+        run: cargo test -p spark-connect-sql
+
   build-binaries:
     needs: [tag-version]
     strategy:
@@ -73,7 +93,7 @@ jobs:
           key: rust-binary-${{ env.PROJECT_NAME }}-${{ env.TARGET }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
 
       # Build binary if cache is missing
-      - name: Build Rust binary
+      - name: Set up Rust
         if: steps.cache-rust.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
