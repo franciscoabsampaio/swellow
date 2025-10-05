@@ -7,6 +7,7 @@ use crate::spark;
 
 use arrow::record_batch::RecordBatch;
 use arrow_ipc::reader::StreamReader;
+use uuid;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tonic::transport::Channel;
@@ -32,9 +33,10 @@ pub(crate) struct AnalyzeHandler {
 #[derive(Clone, Debug)]
 pub struct SparkClient {
     stub: Arc<RwLock<SparkConnectServiceClient<HeadersMiddleware<Channel>>>>,
-    builder: ChannelBuilder,
-    session_id: String,
+    pub builder: ChannelBuilder,
     user_context: Option<spark::UserContext>,
+    session_id: String,
+    operation_id: Option<String>,
     analyzer: AnalyzeHandler,
 }
 
@@ -47,7 +49,6 @@ impl SparkClient {
         let session_id = builder.session_id.to_string();
 
         Self {
-            session_id,
             stub,
             builder,
             user_context: Some(spark::UserContext {
@@ -55,6 +56,8 @@ impl SparkClient {
                 user_name: user_ref,
                 extensions: vec![],
             }),
+            session_id,
+            operation_id: None,
             analyzer: AnalyzeHandler::default()
         }
     }
@@ -70,7 +73,7 @@ impl SparkClient {
     ) -> Result<&mut Self, SparkError> {
         let req = spark::AnalyzePlanRequest {
             session_id: self.session_id.clone(),
-            user_context: None,
+            user_context: self.user_context.clone(),
             client_type: self.builder.user_agent.clone(),
             analyze: Some(analyze),
         };
@@ -145,13 +148,17 @@ impl SparkClient {
 
     /// Execute a SQL command and fetch Arrow batches
     pub async fn execute_command_and_fetch(
-        &self,
+        &mut self,
         sql_cmd: spark::command::CommandType,
     ) -> Result<Vec<RecordBatch>, SparkError> {
+        let operation_id = uuid::Uuid::new_v4().to_string();
+
+        self.operation_id = Some(operation_id.clone());
+
         let req = spark::ExecutePlanRequest {
             session_id: self.session_id.clone(),
-            user_context: None,
-            operation_id: None,
+            user_context: self.user_context.clone(),
+            operation_id: Some(operation_id),
             plan: Some(spark::Plan {
                 op_type: Some(spark::plan::OpType::Command(spark::Command {
                     command_type: Some(sql_cmd),
@@ -178,10 +185,13 @@ impl SparkClient {
                             batches.push(batch?);
                         }
                     },
+                    ResponseType::SqlCommandResult(sql_cmd) => {
+                        panic!("{sql_cmd:?}");
+                    },
                     ResponseType::ResultComplete(_) => break, // finished
                     _ => {
                         return Err(SparkError::Unimplemented(
-                            format!("Handling {:?} not implemented!", data)
+                            format!("Handling {data:?} not implemented!")
                         ))
                     }
                 }
@@ -235,5 +245,121 @@ impl SparkClient {
         self.analyzer.spark_version.to_owned().ok_or_else(|| {
             SparkError::AnalysisException("Spark Version response is empty".to_string())
         })
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::test_utils::setup_session;
+    use crate::spark;
+    
+    use arrow::array::Int32Array;
+    
+    /// **Essential Test 1: Connection and Analysis**
+    /// Verifies that the client can connect, establish a session, and perform
+    /// a basic analysis operation (fetching the Spark version).
+    /// This tests `SparkClient::new` and `SparkClient::analyze`.
+    #[tokio::test]
+    async fn test_analyze_fetches_spark_version() {
+        // Arrange: Start server and create a session
+        let session = setup_session().await.expect("Failed to create Spark session");
+
+        // Act: The version() method on SparkSession will trigger the
+        // underlying SparkClient::analyze call.
+        let version = session
+            .version()
+            .await
+            .expect("Failed to get Spark version");
+
+        // Assert: Check for a valid version string
+        assert!(!version.is_empty(), "Version string should not be empty");
+        assert!(
+            version.starts_with("3.5"),
+            "Expected a Spark 3.5.x version"
+        );
+    }
+
+    /// **Essential Test 2: SQL Execution and Data Fetching**
+    /// The most critical test. Verifies that the client can execute a SQL query
+    /// and correctly retrieve the resulting Arrow RecordBatches.
+    /// This tests `SparkClient::execute_command_and_fetch`.
+    #[tokio::test]
+    async fn test_execute_and_fetch_simple_sql() {
+        // Arrange: Start server and create a session
+        let session = setup_session().await.expect("Failed to create Spark session");
+
+        // Act: Execute a simple SQL query. This uses the client's
+        // execute_command_and_fetch method internally.
+        let batches = session
+            .sql("SELECT 1 AS id, 'hello' AS text")
+            .await
+            .expect("SQL query failed");
+
+        // Assert: Validate the structure and content of the returned data
+        assert_eq!(batches.len(), 1, "Expected exactly one RecordBatch");
+        let batch = &batches[0];
+        assert_eq!(batch.num_rows(), 1, "Expected one row");
+        assert_eq!(batch.num_columns(), 2, "Expected two columns");
+
+        // Verify the data in the first column (id)
+        let id_col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .expect("Column 0 should be an Int32Array");
+        assert_eq!(id_col.value(0), 1);
+    }
+
+    /// **Essential Test 3: Session Validation Error**
+    /// Verifies that the client correctly handles and reports errors, such as
+    /// a session validation failure.
+    #[tokio::test]
+    async fn test_validate_session_error() {
+        // Arrange: Start server and create a session
+        let session = setup_session().await.expect("Failed to create Spark session");
+
+        // Create a clone of the client and manually corrupt its session ID
+        let mut client_with_bad_session = session.client().clone();
+        client_with_bad_session.session_id = "invalid-session-id".to_string();
+
+        // Act: Attempt to use the corrupted client. This will cause the real server
+        // to return an error that Spark Connect may not map directly to a session
+        // ID mismatch, but it will be an error nonetheless.
+        let result = client_with_bad_session
+            .analyze(spark::analyze_plan_request::Analyze::SparkVersion(
+                spark::analyze_plan_request::SparkVersion {},
+            ))
+            .await;
+
+        // Assert: The operation should fail.
+        // NOTE: The real server might return a more generic "INVALID_HANDLE" or
+        // "SESSION_NOT_FOUND" error rather than a mismatched ID error.
+        // We just check that an error of some kind occurred.
+        assert!(
+            result.is_err(),
+            "Expected an error due to invalid session ID"
+        );
+    }
+    
+    /// **Essential Test 4: Interrupt Request**
+    /// Verifies that the client can send an interrupt request without errors.
+    /// This tests the `SparkClient::interrupt_request` method.
+    #[tokio::test]
+    async fn test_interrupt_all_request() {
+        // Arrange: Start server and create a session
+        let session = setup_session().await.expect("Failed to create Spark session");
+        
+        // Act: Send an "interrupt all" request. The server should accept this
+        // command gracefully even if nothing is running.
+        let result = session
+            .client()
+            .interrupt_request(spark::interrupt_request::InterruptType::All, None)
+            .await;
+            
+        // Assert: The request should succeed. The response may be empty.
+        assert!(result.is_ok(), "Interrupt request should not fail");
+        let response = result.unwrap();
+        assert_eq!(response.session_id, session.session_id());
     }
 }

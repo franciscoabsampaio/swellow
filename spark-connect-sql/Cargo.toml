@@ -25,5 +25,8 @@ uuid = { version = "1.18.1", features = ["v4"] }
 [build-dependencies]
 tonic-prost-build = "0.14.2"
 
+[dev-dependencies]
+testcontainers = { version = "0.25.0", features = ["blocking"] }
+
 [features]
 tls = []

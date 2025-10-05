@@ -4,6 +4,9 @@ pub mod error;
 mod middleware;
 mod session;
 
+#[cfg(test)]
+mod test_utils;
+
 /// Spark Connect gRPC protobuf translated using [tonic]
 pub mod spark {
     tonic::include_proto!("spark.connect");
