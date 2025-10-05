@@ -27,4 +27,9 @@ USER root
 RUN chmod +x /opt/entrypoint.sh
 USER spark
 
+# SparkUI
+EXPOSE 15002/tcp
+# Spark Connect Server
+EXPOSE 4040/tcp
+
 ENTRYPOINT ["/opt/entrypoint.sh"]
