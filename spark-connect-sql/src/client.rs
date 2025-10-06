@@ -259,33 +259,8 @@ mod tests {
     use crate::spark;
     
     use arrow::array::Int32Array;
-    
-    /// **Essential Test 1: Connection and Analysis**
-    /// Verifies that the client can connect, establish a session, and perform
-    /// a basic analysis operation (fetching the Spark version).
-    /// This tests `SparkClient::new` and `SparkClient::analyze`.
-    #[tokio::test]
-    async fn test_analyze_fetches_spark_version() {
-        // Arrange: Start server and create a session
-        let session = setup_session().await.expect("Failed to create Spark session");
 
-        // Act: The version() method on SparkSession will trigger the
-        // underlying SparkClient::analyze call.
-        let version = session
-            .version()
-            .await
-            .expect("Failed to get Spark version");
-
-        // Assert: Check for a valid version string
-        assert!(!version.is_empty(), "Version string should not be empty");
-        assert!(
-            version.starts_with("3.5"),
-            "Expected a Spark 3.5.x version"
-        );
-    }
-
-    /// **Essential Test 2: SQL Execution and Data Fetching**
-    /// The most critical test. Verifies that the client can execute a SQL query
+    /// Verifies that the client can execute a SQL query
     /// and correctly retrieve the resulting Arrow RecordBatches.
     /// This tests `SparkClient::execute_command_and_fetch`.
     #[tokio::test]
@@ -315,7 +290,6 @@ mod tests {
         assert_eq!(id_col.value(0), 1);
     }
 
-    /// **Essential Test 3: Session Validation Error**
     /// Verifies that the client correctly handles and reports errors, such as
     /// a session validation failure.
     #[tokio::test]
@@ -337,16 +311,12 @@ mod tests {
             .await;
 
         // Assert: The operation should fail.
-        // NOTE: The real server might return a more generic "INVALID_HANDLE" or
-        // "SESSION_NOT_FOUND" error rather than a mismatched ID error.
-        // We just check that an error of some kind occurred.
         assert!(
             result.is_err(),
             "Expected an error due to invalid session ID"
         );
     }
     
-    /// **Essential Test 4: Interrupt Request**
     /// Verifies that the client can send an interrupt request without errors.
     /// This tests the `SparkClient::interrupt_request` method.
     #[tokio::test]

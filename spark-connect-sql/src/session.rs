@@ -136,12 +136,19 @@ mod tests {
         assert!(spark.is_ok());
     }
 
+    /// Verifies that the client can connect, establish a session, and perform
+    /// a basic analysis operation (fetching the Spark version).
+    /// This tests `SparkClient::new` and `SparkClient::analyze`.
     #[tokio::test]
     async fn test_session_version() -> Result<(), SparkError> {
+        // Arrange: Start server and create a session
         let spark = setup_session().await?;
         
+        // Act: The version() method on SparkSession will trigger the
+        // underlying SparkClient::analyze call.
         let version = spark.version().await?;
 
+        // Assert: Check for a valid version string
         let re = Regex::new(r"^\d+\.\d+\.\d+$").unwrap();
         assert!(re.is_match(&version), "Version {} invalid", version);
         Ok(())
