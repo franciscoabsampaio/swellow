@@ -1,6 +1,5 @@
 use super::{DbEngine, file_checksum};
 use spark_connect_sql as spark;
-// use sqlparser;
 use std::path;
 
 
@@ -12,7 +11,8 @@ pub enum SparkCatalog {
 }
 
 
-/// ODBC-based engines (Spark Delta / Iceberg)
+/// The Spark Engine uses a Spark Connect client
+/// to run queries against a data catalog.
 pub struct SparkEngine {
     catalog: SparkCatalog,
     session: spark::SparkSession,

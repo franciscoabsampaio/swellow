@@ -119,7 +119,7 @@ async fn plan(
     ) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            tracing::error!("Error: {}", e);
             std::process::exit(1);
         }
     };
