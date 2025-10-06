@@ -1,7 +1,7 @@
 use crate::builder::ChannelBuilder;
 use crate::client::SparkClient;
 use crate::error::SparkError;
-use crate::middleware::HeadersLayer;
+use crate::middleware::HeaderInterceptor;
 use crate::spark;
 use crate::spark::spark_connect_service_client::SparkConnectServiceClient;
 
@@ -19,6 +19,7 @@ pub struct SparkSessionBuilder {
 
 impl SparkSessionBuilder {
     pub fn new(connection: &str) -> Self {
+
         let channel_builder =
             ChannelBuilder::create(connection).expect("Invalid Spark connection string");
         Self { channel_builder }
@@ -30,13 +31,13 @@ impl SparkSessionBuilder {
             .connect()
             .await?;
 
-        let channel = ServiceBuilder::new()
-            .layer(HeadersLayer::new(
-                self.channel_builder.headers().unwrap_or_default(),
-            ))
-            .service(channel);
+        let channel = ServiceBuilder::new().service(channel);
 
-        let grpc_client = SparkConnectServiceClient::new(channel);
+        let grpc_client = SparkConnectServiceClient::with_interceptor(
+            channel, HeaderInterceptor::new(
+                self.channel_builder.headers().unwrap_or_default()
+            )
+        );
         let spark_client = SparkClient::new(
             Arc::new(RwLock::new(grpc_client)),
             self.channel_builder.clone(),

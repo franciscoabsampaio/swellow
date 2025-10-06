@@ -1,73 +1,31 @@
-use http_body::Body;
-use futures_util::future::BoxFuture;
-use std::{collections::HashMap, str::FromStr, task::{Context, Poll}};
-use tonic::codegen::http::{Request, HeaderName, HeaderValue};
-use tower::Service;
+use std::collections::HashMap;
+use tonic::{Request, Status};
+use tonic::metadata::{MetadataKey, MetadataValue};
+use tonic::service::Interceptor;
 
 
-/// Layer to inject headers into gRPC requests
-#[derive(Debug, Clone)]
-pub struct HeadersLayer {
+/// Interceptor that injects headers into gRPC requests
+#[derive(Clone, Debug)]
+pub struct HeaderInterceptor {
     headers: HashMap<String, String>,
 }
 
-impl HeadersLayer {
+impl HeaderInterceptor {
     pub fn new(headers: HashMap<String, String>) -> Self {
         Self { headers }
     }
 }
 
-impl<S> tower::Layer<S> for HeadersLayer {
-    type Service = HeadersMiddleware<S>;
+impl Interceptor for HeaderInterceptor {
+    fn call(&mut self, mut req: Request<()>) -> Result<Request<()>, Status> {
+        for (key, value) in &self.headers {
+            let metadata_key = MetadataKey::from_bytes(key.as_bytes())
+                .map_err(|_| Status::invalid_argument(format!("Invalid header key: {}", key)))?;
+            let metadata_value = MetadataValue::try_from(value.as_str())
+                .map_err(|_| Status::invalid_argument(format!("Invalid header value: {}", value)))?;
 
-    fn layer(&self, inner: S) -> Self::Service {
-        HeadersMiddleware::new(inner, self.headers.clone())
-    }
-}
-
-/// Middleware that applies headers to outgoing gRPC requests
-#[derive(Clone, Debug)]
-pub struct HeadersMiddleware<S> {
-    inner: S,
-    headers: HashMap<String, String>,
-}
-
-impl<S> HeadersMiddleware<S> {
-    pub fn new(inner: S, headers: HashMap<String, String>) -> Self {
-        Self { inner, headers }
-    }
-}
-
-impl<S, B> Service<Request<B>> for HeadersMiddleware<S>
-where
-    S: Service<Request<B>> + Clone + Send + 'static,
-    S::Future: Send + 'static,
-    S::Response: Send + 'static,
-    S::Error: Send + std::fmt::Debug + 'static,
-    B: Body + Send + 'static,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, mut req: Request<B>) -> Self::Future {
-        let clone = self.inner.clone();
-        let mut inner = std::mem::replace(&mut self.inner, clone);
-
-        let headers = self.headers.clone();
-
-        Box::pin(async move {
-            for (key, value) in headers {
-                let key = HeaderName::from_str(&key).expect("Invalid header name");
-                let value = HeaderValue::from_str(&value).expect("Invalid header value");
-                req.headers_mut().insert(key, value);
-            }
-
-            inner.call(req).await
-        })
+            req.metadata_mut().insert(metadata_key, metadata_value);
+        }
+        Ok(req)
     }
 }

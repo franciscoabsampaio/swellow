@@ -1,6 +1,6 @@
 use crate::builder::ChannelBuilder;
 use crate::error::SparkError;
-use crate::middleware::HeadersMiddleware;
+use crate::middleware::HeaderInterceptor;
 use crate::spark::execute_plan_response::ResponseType;
 use crate::spark::spark_connect_service_client::SparkConnectServiceClient;
 use crate::spark;
@@ -29,10 +29,14 @@ pub(crate) struct AnalyzeHandler {
 }
 
 
+/// Utility type to reduce boilerplate
+type InterceptedChannel = tonic::service::interceptor::InterceptedService<Channel, HeaderInterceptor>;
+
+
 /// The minimal Spark client, used internally by `SparkSession`.
 #[derive(Clone, Debug)]
 pub struct SparkClient {
-    stub: Arc<RwLock<SparkConnectServiceClient<HeadersMiddleware<Channel>>>>,
+    stub: Arc<RwLock<SparkConnectServiceClient<InterceptedChannel>>>,
     pub builder: ChannelBuilder,
     user_context: Option<spark::UserContext>,
     session_id: String,
@@ -42,7 +46,7 @@ pub struct SparkClient {
 
 impl SparkClient {
     pub fn new(
-        stub: Arc<RwLock<SparkConnectServiceClient<HeadersMiddleware<Channel>>>>,
+        stub: Arc<RwLock<SparkConnectServiceClient<InterceptedChannel>>>,
         builder: ChannelBuilder,
     ) -> Self {
         let user_ref = builder.user_id.clone().unwrap_or("".to_string());
