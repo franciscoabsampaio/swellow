@@ -57,13 +57,13 @@ pub struct SparkSession {
 
 impl SparkSession {
     pub fn new(client: SparkClient) -> Self {
-        let session_id = client.session_id();
+        let session_id = client.session_id().to_string();
         Self { client, session_id }
     }
 
     /// Return the session ID
-    pub fn session_id(&self) -> &str {
-        &self.session_id
+    pub fn session_id(&self) -> String {
+        self.session_id.to_string()
     }
 
     /// Return a clone of the client
@@ -71,8 +71,8 @@ impl SparkSession {
         self.client.clone()
     }
 
-    /// Execute a SQL query and return Arrow record batches directly.
-    pub async fn sql(&self, query: &str) -> Result<Vec<RecordBatch>, SparkError> {
+    /// Execute a SQL query and return a plan (lazy).
+    pub async fn sql(&self, query: &str) -> Result<spark::Plan, SparkError> {
         let sql_cmd = spark::command::CommandType::SqlCommand(
             spark::SqlCommand {
                 sql: query.to_string(),
@@ -81,34 +81,45 @@ impl SparkSession {
             },
         );
 
-        // Execute command and fetch response
-        let batches = self.client.clone()
-            .execute_command_and_fetch(sql_cmd.into())
-            .await?;
+        // Execute plan
+        let plan = spark::Plan {
+            op_type: Some(spark::plan::OpType::Command(spark::Command {
+                command_type: Some(sql_cmd),
+            })),
+        };
+        let mut client = self.client();
+        let result = client.execute_plan(plan).await?;
 
-        Ok(batches)
+        Ok(spark::Plan {
+            op_type: Some(spark::plan::OpType::Root(result.relation()?)),
+        })
+    }
+
+    /// Collect the results from a lazy plan
+    pub async fn collect(&self, plan: spark::Plan) -> Result<Vec<RecordBatch>, SparkError> {
+        let mut client = self.client();
+
+        Ok(client.execute_plan(plan).await?.batches())
     }
 
     /// Interrupt all running operations
     pub async fn interrupt_all(&self) -> Result<Vec<String>, SparkError> {
-        let resp = self.client
-            .interrupt_request(
+        Ok(
+            self.client().interrupt(
                 spark::interrupt_request::InterruptType::All,
                 None
-            )
-            .await?;
-        Ok(resp.interrupted_ids)
+            ).await?.interrupted_ids()
+        )
     }
 
     /// Interrupt a specific operation by ID
     pub async fn interrupt_operation(&self, op_id: &str) -> Result<Vec<String>, SparkError> {
-        let resp = self.client
-            .interrupt_request(
+        Ok(
+            self.client().interrupt(
                 spark::interrupt_request::InterruptType::OperationId,
                 Some(op_id.to_string()),
-            )
-            .await?;
-        Ok(resp.interrupted_ids)
+            ).await?.interrupted_ids()
+        )
     }
 
     /// The version of Spark on which this application is running.
@@ -125,10 +136,12 @@ impl SparkSession {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use regex::Regex;
-
     use crate::test_utils::test_utils::setup_session;
+    
+    use super::*;
+    
+    use arrow::array::Int32Array;
+    use regex::Regex;
 
     #[tokio::test]
     async fn test_session_create() {
@@ -152,5 +165,38 @@ mod tests {
         let re = Regex::new(r"^\d+\.\d+\.\d+$").unwrap();
         assert!(re.is_match(&version), "Version {} invalid", version);
         Ok(())
+    }
+
+    /// Verifies that the client can execute a SQL query
+    /// and correctly retrieve the resulting Arrow RecordBatches.
+    /// This tests `SparkClient::execute_command_and_fetch`.
+    #[tokio::test]
+    async fn test_sql() {
+        // Arrange: Start server and create a session
+        let session = setup_session().await.expect("Failed to create Spark session");
+
+        // Act: Execute a simple SQL query.
+        let lazy_plan = session
+            .sql("SELECT 1 AS id, 'hello' AS text")
+            .await
+            .expect("SQL query failed");
+        let batches = session
+            .collect(lazy_plan)
+            .await
+            .expect("Failed to collect batches");
+
+        // Assert: Validate the structure and content of the returned data
+        assert_eq!(batches.len(), 1, "Expected exactly one RecordBatch");
+        let batch = &batches[0];
+        assert_eq!(batch.num_rows(), 1, "Expected one row");
+        assert_eq!(batch.num_columns(), 2, "Expected two columns");
+
+        // Verify the data in the first column (id)
+        let id_col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .expect("Column 0 should be an Int32Array");
+        assert_eq!(id_col.value(0), 1);
     }
 }

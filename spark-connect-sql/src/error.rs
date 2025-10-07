@@ -8,6 +8,7 @@ use uuid;
 pub enum SparkError {
     Aborted(String),
     AnalysisException(String),
+    ArrowError(String),
     Cancelled(String),
     DataLoss(String),
     DeadlineExceeded(String),
@@ -25,11 +26,14 @@ pub enum SparkError {
     Unauthenticated(String),
 }
 
+impl std::error::Error for SparkError {}
+
 impl fmt::Display for SparkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SparkError::Aborted(msg) => write!(f, "Aborted: {}", msg),
             SparkError::AnalysisException(msg) => write!(f, "Analysis Exception: {}", msg),
+            SparkError::ArrowError(msg) => write!(f, "Arrow Error: {}", msg),
             SparkError::Cancelled(msg) => write!(f, "Cancelled: {}", msg),
             SparkError::DataLoss(msg) => write!(f, "Data Loss: {}", msg),
             SparkError::DeadlineExceeded(msg) => write!(f, "Deadline Exceeded: {}", msg),

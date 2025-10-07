@@ -1,7 +1,6 @@
 use std::ops::DerefMut;
 
 use super::{DbEngine, file_checksum};
-use anyhow::anyhow;
 use sqlparser;
 use sqlx::{PgPool, Postgres, Transaction};
 use std::{path, process};

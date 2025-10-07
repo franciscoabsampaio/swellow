@@ -1,32 +1,17 @@
 use crate::builder::ChannelBuilder;
 use crate::error::SparkError;
+use crate::handlers::{AnalyzeHandler, ExecuteHandler, InterruptHandler};
 use crate::middleware::HeaderInterceptor;
-use crate::spark::execute_plan_response::ResponseType;
-use crate::spark::spark_connect_service_client::SparkConnectServiceClient;
 use crate::spark;
+use crate::spark::spark_connect_service_client::SparkConnectServiceClient;
+use crate::spark::execute_plan_response::ResponseType;
 
-use arrow::record_batch::RecordBatch;
-use arrow_ipc::reader::StreamReader;
-use uuid;
+use arrow::array::RecordBatch;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tonic::codec::Streaming;
 use tonic::transport::Channel;
-
-
-#[derive(Default, Debug, Clone)]
-pub(crate) struct AnalyzeHandler {
-    pub(crate) schema: Option<spark::DataType>,
-    pub(crate) explain: Option<String>,
-    pub(crate) tree_string: Option<String>,
-    pub(crate) is_local: Option<bool>,
-    pub(crate) is_streaming: Option<bool>,
-    pub(crate) input_files: Option<Vec<String>>,
-    pub(crate) spark_version: Option<String>,
-    pub(crate) ddl_parse: Option<spark::DataType>,
-    pub(crate) same_semantics: Option<bool>,
-    pub(crate) semantic_hash: Option<i32>,
-    pub(crate) get_storage_level: Option<spark::StorageLevel>,
-}
+use uuid;
 
 
 /// Utility type to reduce boilerplate
@@ -37,11 +22,15 @@ type InterceptedChannel = tonic::service::interceptor::InterceptedService<Channe
 #[derive(Clone, Debug)]
 pub struct SparkClient {
     stub: Arc<RwLock<SparkConnectServiceClient<InterceptedChannel>>>,
-    pub builder: ChannelBuilder,
+    builder: ChannelBuilder,
     user_context: Option<spark::UserContext>,
+    use_reattachable_execute: bool,
     session_id: String,
     operation_id: Option<String>,
-    analyzer: AnalyzeHandler,
+    response_id: Option<String>,
+    handler_analyze: AnalyzeHandler,
+    handler_execute: ExecuteHandler,
+    handler_interrupt: InterruptHandler,
 }
 
 impl SparkClient {
@@ -62,86 +51,45 @@ impl SparkClient {
             }),
             session_id,
             operation_id: None,
-            analyzer: AnalyzeHandler::default()
+            response_id: None,
+            handler_analyze: AnalyzeHandler::default(),
+            handler_execute: ExecuteHandler::default(),
+            handler_interrupt: InterruptHandler::default(),
+            use_reattachable_execute: true,
         }
     }
 
-    /// Returns the session ID
+    /// Return session id
     pub fn session_id(&self) -> String {
-        self.session_id.clone()
+        self.session_id.to_string()
     }
 
-    pub async fn analyze(
-        &mut self,
-        analyze: spark::analyze_plan_request::Analyze,
-    ) -> Result<&mut Self, SparkError> {
-        let req = spark::AnalyzePlanRequest {
-            session_id: self.session_id.clone(),
-            user_context: self.user_context.clone(),
-            client_type: self.builder.user_agent.clone(),
-            analyze: Some(analyze),
-        };
-
-        // clear out any prior responses
-        self.analyzer = AnalyzeHandler::default();
-
-        let mut client = self.stub.write().await;
-        let resp = client.analyze_plan(req).await?.into_inner();
-        drop(client);
-
-        self.handle_analyze(resp)
+    /// Return the spark version
+    pub fn spark_version(&self) -> Result<String, SparkError> {
+        self.handler_analyze.spark_version.to_owned().ok_or_else(|| {
+            SparkError::AnalysisException("Spark Version response is empty".to_string())
+        })
     }
 
-    fn handle_analyze(
-        &mut self,
-        resp: spark::AnalyzePlanResponse,
-    ) -> Result<&mut Self, SparkError> {
-        self.validate_session(&resp.session_id)?;
-        if let Some(result) = resp.result {
-            match result {
-                spark::analyze_plan_response::Result::Schema(schema) => {
-                    self.analyzer.schema = schema.schema
-                }
-                spark::analyze_plan_response::Result::Explain(explain) => {
-                    self.analyzer.explain = Some(explain.explain_string)
-                }
-                spark::analyze_plan_response::Result::TreeString(tree_string) => {
-                    self.analyzer.tree_string = Some(tree_string.tree_string)
-                }
-                spark::analyze_plan_response::Result::IsLocal(is_local) => {
-                    self.analyzer.is_local = Some(is_local.is_local)
-                }
-                spark::analyze_plan_response::Result::IsStreaming(is_streaming) => {
-                    self.analyzer.is_streaming = Some(is_streaming.is_streaming)
-                }
-                spark::analyze_plan_response::Result::InputFiles(input_files) => {
-                    self.analyzer.input_files = Some(input_files.files)
-                }
-                spark::analyze_plan_response::Result::SparkVersion(spark_version) => {
-                    self.analyzer.spark_version = Some(spark_version.version)
-                }
-                spark::analyze_plan_response::Result::DdlParse(ddl_parse) => {
-                    self.analyzer.ddl_parse = ddl_parse.parsed
-                }
-                spark::analyze_plan_response::Result::SameSemantics(same_semantics) => {
-                    self.analyzer.same_semantics = Some(same_semantics.result)
-                }
-                spark::analyze_plan_response::Result::SemanticHash(semantic_hash) => {
-                    self.analyzer.semantic_hash = Some(semantic_hash.result)
-                }
-                spark::analyze_plan_response::Result::Persist(_) => {}
-                spark::analyze_plan_response::Result::Unpersist(_) => {}
-                spark::analyze_plan_response::Result::GetStorageLevel(level) => {
-                    self.analyzer.get_storage_level = level.storage_level
-                }
-            }
-        }
+    /// Return interrupt ids
+    pub fn interrupted_ids(&self) -> Vec<String> {
+        self.handler_interrupt.interrupted_ids.to_owned()
+    }
 
-        Ok(self)
+    /// Return relation response
+    pub fn relation(&self) -> Result<spark::Relation, SparkError> {
+        self.handler_execute.relation.to_owned().ok_or_else(|| {
+            SparkError::AnalysisException("Relation response is empty".to_string())
+        })
+    }
+
+    /// Return batches in response handler
+    pub fn batches(&self) -> Vec<RecordBatch> {
+        self.handler_execute.batches.to_owned()
     }
 
     fn validate_session(&self, session_id: &str) -> Result<(), SparkError> {
-        if self.builder.session_id.to_string() != session_id {
+        if self.session_id() != session_id {
             return Err(SparkError::AnalysisException(format!(
                 "Received incorrect session identifier for request: {0} != {1}",
                 self.builder.session_id, session_id
@@ -150,66 +98,86 @@ impl SparkClient {
         Ok(())
     }
 
-    /// Execute a SQL command and fetch Arrow batches
-    pub async fn execute_command_and_fetch(
+    pub async fn analyze(
         &mut self,
-        sql_cmd: spark::command::CommandType,
-    ) -> Result<Vec<RecordBatch>, SparkError> {
-        let operation_id = uuid::Uuid::new_v4().to_string();
-
-        self.operation_id = Some(operation_id.clone());
-
-        let req = spark::ExecutePlanRequest {
-            session_id: self.session_id.clone(),
+        analyze: spark::analyze_plan_request::Analyze,
+    ) -> Result<&mut Self, SparkError> {
+        let req = spark::AnalyzePlanRequest {
+            session_id: self.session_id(),
             user_context: self.user_context.clone(),
-            operation_id: Some(operation_id),
-            plan: Some(spark::Plan {
-                op_type: Some(spark::plan::OpType::Command(spark::Command {
-                    command_type: Some(sql_cmd),
-                })),
-            }),
             client_type: self.builder.user_agent.clone(),
-            request_options: vec![],
-            tags: vec![],
+            analyze: Some(analyze),
         };
-
+        
         let mut client = self.stub.write().await;
-        let mut stream = client.execute_plan(req).await?.into_inner();
+        let resp = client.analyze_plan(req).await?.into_inner();
         drop(client);
+        
+        self.handle_analyze_response(resp)?;
+        
+        Ok(self)
+    }
 
-        let mut batches = Vec::new();
+    fn handle_analyze_response(
+        &mut self,
+        resp: spark::AnalyzePlanResponse,
+    ) -> Result<(), SparkError> {
+        self.validate_session(&resp.session_id)?;
 
-        while let Some(resp) = stream.message().await? {
-            self.validate_session(&resp.session_id)?;
-            if let Some(data) = resp.response_type {
-                match data {
-                    ResponseType::ArrowBatch(batch) => {
-                        let reader = StreamReader::try_new(batch.data.as_slice(), None)?;
-                        for batch in reader {
-                            batches.push(batch?);
-                        }
-                    },
-                    ResponseType::SqlCommandResult(sql_cmd) => {
-                        panic!("{sql_cmd:?}");
-                    },
-                    ResponseType::ResultComplete(_) => break, // finished
-                    _ => {
-                        return Err(SparkError::Unimplemented(
-                            format!("Handling {data:?} not implemented!")
-                        ))
-                    }
+        // clear out any prior responses
+        self.handler_analyze = AnalyzeHandler::default();
+        
+        if let Some(result) = resp.result {
+            match result {
+                spark::analyze_plan_response::Result::Schema(schema) => {
+                    self.handler_analyze.schema = schema.schema
                 }
+                // spark::analyze_plan_response::Result::Explain(explain) => {
+                //     self.handler_analyze.explain = Some(explain.explain_string)
+                // }
+                // spark::analyze_plan_response::Result::TreeString(tree_string) => {
+                //     self.handler_analyze.tree_string = Some(tree_string.tree_string)
+                // }
+                // spark::analyze_plan_response::Result::IsLocal(is_local) => {
+                //     self.handler_analyze.is_local = Some(is_local.is_local)
+                // }
+                // spark::analyze_plan_response::Result::IsStreaming(is_streaming) => {
+                //     self.handler_analyze.is_streaming = Some(is_streaming.is_streaming)
+                // }
+                // spark::analyze_plan_response::Result::InputFiles(input_files) => {
+                //     self.handler_analyze.input_files = Some(input_files.files)
+                // }
+                spark::analyze_plan_response::Result::SparkVersion(spark_version) => {
+                    self.handler_analyze.spark_version = Some(spark_version.version)
+                }
+                // spark::analyze_plan_response::Result::DdlParse(ddl_parse) => {
+                //     self.handler_analyze.ddl_parse = ddl_parse.parsed
+                // }
+                // spark::analyze_plan_response::Result::SameSemantics(same_semantics) => {
+                //     self.handler_analyze.same_semantics = Some(same_semantics.result)
+                // }
+                // spark::analyze_plan_response::Result::SemanticHash(semantic_hash) => {
+                //     self.handler_analyze.semantic_hash = Some(semantic_hash.result)
+                // }
+                // spark::analyze_plan_response::Result::Persist(_) => {}
+                // spark::analyze_plan_response::Result::Unpersist(_) => {}
+                // spark::analyze_plan_response::Result::GetStorageLevel(level) => {
+                //     self.handler_analyze.get_storage_level = level.storage_level
+                // }
+                _ => return Err(SparkError::Unimplemented(format!(
+                    "Handling of analyze response {result:?} not implemented!"
+                )))
             }
         }
 
-        Ok(batches)
+        Ok(())
     }
 
-    pub async fn interrupt_request(
-        &self,
+    pub async fn interrupt(
+        &mut self,
         interrupt_type: spark::interrupt_request::InterruptType,
         id_or_tag: Option<String>,
-    ) -> Result<spark::InterruptResponse, SparkError> {
+    ) -> Result<&mut Self, SparkError> {
         let mut req = spark::InterruptRequest {
             session_id: self.session_id(),
             user_context: self.user_context.clone(),
@@ -242,13 +210,188 @@ impl SparkClient {
 
         let mut client = self.stub.write().await;
         let resp = client.interrupt(req).await?.into_inner();
-        Ok(resp)
+        drop(client);
+        
+        self.handler_interrupt = InterruptHandler::default();
+        self.handler_interrupt.interrupted_ids = resp.interrupted_ids;
+        
+        Ok(self)
+    }
+    
+
+    /// Execute a plan request
+    pub async fn execute_plan(
+        &mut self,
+        plan: spark::Plan
+    ) -> Result<&mut Self, SparkError> {
+        let mut request = self.new_execute_plan_request();
+        request.plan = Some(plan);
+
+        let mut client = self.stub.write().await;
+        let mut stream = client
+            .execute_plan(request)
+            .await?
+            .into_inner();
+        drop(client);
+
+        self.handler_execute = ExecuteHandler::default();
+        self.process_stream(&mut stream).await?;
+        
+        if self.use_reattachable_execute && self.handler_execute.result_complete {
+            self.release_all().await?;
+        }
+        
+        Ok(self)
     }
 
-    pub fn spark_version(&mut self) -> Result<String, SparkError> {
-        self.analyzer.spark_version.to_owned().ok_or_else(|| {
-            SparkError::AnalysisException("Spark Version response is empty".to_string())
-        })
+    fn new_execute_plan_request(&mut self) -> spark::ExecutePlanRequest {
+        let operation_id = uuid::Uuid::new_v4().to_string();
+
+        self.operation_id = Some(operation_id.clone());
+
+        spark::ExecutePlanRequest {
+            session_id: self.session_id(),
+            user_context: self.user_context.clone(),
+            operation_id: Some(operation_id),
+            plan: None,
+            client_type: self.builder.user_agent.clone(),
+            request_options: vec![spark::execute_plan_request::RequestOption {
+                request_option: Some(
+                    spark::execute_plan_request::request_option::RequestOption::ReattachOptions(
+                        spark::ReattachOptions { reattachable: self.use_reattachable_execute },
+                    ),
+                ),
+            }],
+            tags: vec![],
+        }
+    }
+    
+    fn handle_execute_response(
+        &mut self,
+        resp: spark::ExecutePlanResponse
+    ) -> Result<(), SparkError> {
+        self.validate_session(&resp.session_id)?;
+
+        self.operation_id = Some(resp.operation_id);
+        self.response_id = Some(resp.response_id);
+
+        if let Some(data) = resp.response_type {
+            match data {
+                ResponseType::ArrowBatch(res) => {
+                    let (batches, total_count) = crate::io::deserialize(res.data.as_slice(), res.row_count)?;
+
+                    self.handler_execute.batches.extend(batches);
+                    self.handler_execute.total_count += total_count;
+                }
+                ResponseType::SqlCommandResult(sql_cmd) => {
+                    self.handler_execute.relation = sql_cmd.clone().relation
+                }
+                // ResponseType::WriteStreamOperationStartResult(write_stream_op) => {
+                //     self.handler.write_stream_operation_start_result = Some(write_stream_op)
+                // }
+                // ResponseType::StreamingQueryCommandResult(stream_qry_cmd) => {
+                //     self.handler.streaming_query_command_result = Some(stream_qry_cmd)
+                // }
+                // ResponseType::GetResourcesCommandResult(resource_cmd) => {
+                //     self.handler.get_resources_command_result = Some(resource_cmd)
+                // }
+                // ResponseType::StreamingQueryManagerCommandResult(stream_qry_mngr_cmd) => {
+                //     self.handler.streaming_query_manager_command_result = Some(stream_qry_mngr_cmd)
+                // }
+                ResponseType::ResultComplete(_) => self.handler_execute.result_complete = true,
+                _ => return Err(SparkError::Unimplemented(
+                    format!("Handling of plan response {data:?} not implemented!")
+                ))
+            }
+        }
+        Ok(())
+    }
+
+    async fn reattach(&mut self) -> Result<(), SparkError> {
+        let request = spark::ReattachExecuteRequest {
+            session_id: self.session_id(),
+            user_context: self.user_context.clone(),
+            operation_id: self.operation_id.clone().unwrap(),
+            client_type: self.builder.user_agent.clone(),
+            last_response_id: self.response_id.clone(),
+        };
+
+        let mut client = self.stub.write().await;
+        let mut stream = client
+            .reattach_execute(request)
+            .await?
+            .into_inner();
+        drop(client);
+
+        self.process_stream(&mut stream).await?;
+        
+        if self.use_reattachable_execute && self.handler_execute.result_complete {
+            self.release_all().await?;
+        }
+
+        Ok(())
+    }
+    
+    async fn process_stream(
+        &mut self, stream: &mut Streaming<spark::ExecutePlanResponse>
+    ) -> Result<(), SparkError> {
+        while let Some(_resp) = match stream.message().await {
+            Ok(Some(msg)) => {
+                self.handle_execute_response(msg.clone())?;
+                Some(msg)
+            }
+            Ok(None) => {
+                if self.use_reattachable_execute && !self.handler_execute.result_complete {
+                    Box::pin(self.reattach()).await?;
+                }
+                None
+            }
+            Err(err) => {
+                if self.use_reattachable_execute && self.response_id.is_some() {
+                    self.release_until().await?;
+                }
+                return Err(err.into());
+            }
+        } {}
+
+        Ok(())
+    }
+
+    async fn release_until(&mut self) -> Result<(), SparkError> {
+        let release_until = spark::release_execute_request::ReleaseUntil {
+            response_id: self.response_id.clone().unwrap(),
+        };
+
+        self.release_execute(spark::release_execute_request::Release::ReleaseUntil(
+            release_until,
+        )).await
+    }
+
+    async fn release_all(&mut self) -> Result<(), SparkError> {
+        let release_all = spark::release_execute_request::ReleaseAll {};
+
+        self.release_execute(spark::release_execute_request::Release::ReleaseAll(
+            release_all,
+        )).await
+    }
+
+    async fn release_execute(
+        &mut self,
+        release: spark::release_execute_request::Release,
+    ) -> Result<(), SparkError> {
+        let mut client = self.stub.write().await;
+
+        let req = spark::ReleaseExecuteRequest {
+            session_id: self.session_id(),
+            user_context: self.user_context.clone(),
+            operation_id: self.operation_id.clone().unwrap(),
+            client_type: self.builder.user_agent.clone(),
+            release: Some(release),
+        };
+
+        let _resp = client.release_execute(req).await?.into_inner();
+
+        Ok(())
     }
 }
 
@@ -258,38 +401,6 @@ mod tests {
     use crate::test_utils::test_utils::setup_session;
     use crate::spark;
     
-    use arrow::array::Int32Array;
-
-    /// Verifies that the client can execute a SQL query
-    /// and correctly retrieve the resulting Arrow RecordBatches.
-    /// This tests `SparkClient::execute_command_and_fetch`.
-    #[tokio::test]
-    async fn test_execute_and_fetch_simple_sql() {
-        // Arrange: Start server and create a session
-        let session = setup_session().await.expect("Failed to create Spark session");
-
-        // Act: Execute a simple SQL query. This uses the client's
-        // execute_command_and_fetch method internally.
-        let batches = session
-            .sql("SELECT 1 AS id, 'hello' AS text")
-            .await
-            .expect("SQL query failed");
-
-        // Assert: Validate the structure and content of the returned data
-        assert_eq!(batches.len(), 1, "Expected exactly one RecordBatch");
-        let batch = &batches[0];
-        assert_eq!(batch.num_rows(), 1, "Expected one row");
-        assert_eq!(batch.num_columns(), 2, "Expected two columns");
-
-        // Verify the data in the first column (id)
-        let id_col = batch
-            .column(0)
-            .as_any()
-            .downcast_ref::<Int32Array>()
-            .expect("Column 0 should be an Int32Array");
-        assert_eq!(id_col.value(0), 1);
-    }
-
     /// Verifies that the client correctly handles and reports errors, such as
     /// a session validation failure.
     #[tokio::test]
@@ -326,14 +437,13 @@ mod tests {
         
         // Act: Send an "interrupt all" request. The server should accept this
         // command gracefully even if nothing is running.
-        let result = session
-            .client()
-            .interrupt_request(spark::interrupt_request::InterruptType::All, None)
-            .await;
+        let mut client = session.client();
+        let result = client
+            .interrupt(spark::interrupt_request::InterruptType::All, None)
+            .await
+            .unwrap();
             
         // Assert: The request should succeed. The response may be empty.
-        assert!(result.is_ok(), "Interrupt request should not fail");
-        let response = result.unwrap();
-        assert_eq!(response.session_id, session.session_id());
+        assert_eq!(result.session_id(), session.session_id());
     }
 }

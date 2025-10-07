@@ -1,6 +1,8 @@
+mod io;
 mod builder;
 mod client;
 pub mod error;
+mod handlers;
 mod middleware;
 mod session;
 

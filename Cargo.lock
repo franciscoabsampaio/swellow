@@ -3671,6 +3671,7 @@ name = "swellow"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "arrow",
  "async-trait",
  "clap",
  "odbc-api",

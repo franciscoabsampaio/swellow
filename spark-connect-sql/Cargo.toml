@@ -8,8 +8,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-arrow = "56.2.0"
-arrow-ipc = "56.2.0"
+arrow = { workspace = true }
+arrow-ipc = { workspace = true }
 futures-util = "0.3.31"
 http-body = "1.0.1"
 prost = "0.14.1"

@@ -1,4 +1,5 @@
 use super::{DbEngine, file_checksum};
+use arrow;
 use spark_connect_sql as spark;
 use std::path;
 
@@ -28,41 +29,28 @@ impl SparkEngine {
         })
     }
 
-    fn connect(&self) -> anyhow::Result<> {
-        let conn = self.env.connect_with_connection_string(
-            &self.conn_str,
-            odbc::ConnectionOptions::default()
-        )?;
-        
-        Ok(conn)
-    }
-
-    /// Executes a statement, returning nothing
-    fn _execute(&self, sql: &str, params: impl ParameterCollectionRef) -> anyhow::Result<()> {
-        let conn = self.connect()?;
-        
-        conn.execute(sql, params, Some(30))?;
-
-        Ok(())
-    }
-
     /// Fetch all rows for a single i64 column
-    fn fetch_all_i64(&mut self, sql: &str) -> anyhow::Result<Vec<i64>> {
-        let conn = self.connect()?;
-        
+    async fn fetch_all_i64(&mut self, sql: &str, column_name: &str) -> anyhow::Result<Vec<i64>> {        
         let mut results = Vec::new();
         
-        let cursor_opt = conn.execute(sql, (), Some(30))?;
-        
-        if let Some(mut cursor) = cursor_opt {
-            while let Some(mut row) = cursor.next_row()? {
-                let mut buf = Nullable::<i64>::null();
-                row.get_data(1, &mut buf)?;
-                if let Some(value) = buf.into_opt() {
-                    results.push(value);
+        let batches = self.session.sql(sql).await?;
+        for batch in batches {
+            let column_index = batch.schema().index_of(column_name).expect(
+                &format!("Column not found: {column_name}")
+            );
+            let array_ref = batch.column(column_index);
+            let int64_array = array_ref
+                .as_any()
+                .downcast_ref::<arrow::array::Int64Array>()
+                .expect("Column is not Int64Array!");
+
+            for i in 0..int64_array.len() {
+                if int64_array.is_valid(i) {
+                    results.push(int64_array.value(i));
                 }
             }
         }
+
         Ok(results)
     }
 }
@@ -94,27 +82,24 @@ impl DbEngine for SparkEngine {
             using_clause
         );
 
-        self._execute(&create_table_sql, ())?;
+        self.session.sql(&create_table_sql).await?;
 
         Ok(())
     }
 
     async fn begin(&mut self) -> anyhow::Result<()> {
-        self.connect()?;
         Ok(())
     }
 
     async fn execute(&mut self, sql: &str) -> anyhow::Result<()> {
-        self._execute(sql, ())?;
+        self.session.sql(sql).await?;
         Ok(())
     }
 
     /// Fetch an optional single column value
     async fn fetch_optional_i64(&mut self, sql: &str) -> anyhow::Result<Option<i64>> {
-        let conn = self.connect()?;
+        let batches = self.session.sql(sql).await?;
 
-        let cursor_opt = conn.execute(sql, (), Some(30))?;
-        
         if let Some(mut cursor) = cursor_opt {
             if let Some(mut row) = cursor.next_row()? {
                 let mut buf = Nullable::<i64>::null();
@@ -154,14 +139,14 @@ impl DbEngine for SparkEngine {
     }
 
     async fn disable_records(&mut self, current_version_id: i64) -> anyhow::Result<()> {
-        self._execute(
+        self.session.sql(
             r#"
             UPDATE swellow_records
             SET status='DISABLED'
             WHERE version_id > ?
             "#,
             &current_version_id
-        )?;
+        ).await?;
 
         Ok(())
     }
@@ -174,7 +159,7 @@ impl DbEngine for SparkEngine {
         version_id: i64,
         file_path: &path::PathBuf
     ) -> anyhow::Result<()> {
-        self._execute(&format!(r#"
+        self.session.sql(&format!(r#"
             INSERT INTO swellow_records(
                 object_type,
                 object_name_before,
@@ -201,13 +186,13 @@ impl DbEngine for SparkEngine {
             object_name_after.to_string(),
             version_id,
             file_checksum(&file_path)?,
-        ), ())?;
+        )).await?;
 
         Ok(())
     }
 
     async fn update_record(&mut self, status: &str, version_id: i64) -> anyhow::Result<()> {
-        self._execute(&format!(
+        self.session.sql(&format!(
             r#"
             UPDATE swellow_records
             SET
@@ -215,7 +200,7 @@ impl DbEngine for SparkEngine {
             WHERE
                 version_id={}
             "#, status, version_id
-        ), ())?;
+        )).await?;
         
         Ok(())
     }
