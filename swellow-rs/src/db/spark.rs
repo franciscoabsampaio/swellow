@@ -1,5 +1,5 @@
 use super::{DbEngine, file_checksum};
-use arrow;
+use arrow::{self, array::Array, array::RecordBatch};
 use spark_connect_sql as spark;
 use std::path;
 
@@ -29,11 +29,16 @@ impl SparkEngine {
         })
     }
 
+    async fn sql(&mut self, sql: &str) -> anyhow::Result<Vec<RecordBatch>> {
+        let plan = self.session.sql(sql).await?;
+        Ok(self.session.collect(plan).await?)
+    }
+
     /// Fetch all rows for a single i64 column
     async fn fetch_all_i64(&mut self, sql: &str, column_name: &str) -> anyhow::Result<Vec<i64>> {        
         let mut results = Vec::new();
-        
-        let batches = self.session.sql(sql).await?;
+
+        let batches = self.sql(sql).await?;
         for batch in batches {
             let column_index = batch.schema().index_of(column_name).expect(
                 &format!("Column not found: {column_name}")

@@ -20,7 +20,7 @@ phf = { version = "0.13.1", features = ["macros"] }
 # pyo3 = { version = "0.26", features = ["extension-module", "experimental-async"] }
 # pyo3-async-runtimes = { version = "0.26.0", features = ["tokio-runtime"] }
 sha2 = "0.10"
-spark-connect-sql = { path = "../spark-connect-sql" }
+spark-connect-sql = { path = "../spark-connect-sql", features = ["chrono", "tls"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "macros"] }
 sqlparser = "0.58"
 tokio = { workspace = true }

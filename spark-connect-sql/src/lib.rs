@@ -5,9 +5,7 @@ pub mod error;
 mod handlers;
 mod middleware;
 mod session;
-
-#[cfg(test)]
-mod test_utils;
+pub mod sql;
 
 /// Spark Connect gRPC protobuf translated using [tonic]
 pub mod spark {
@@ -16,3 +14,6 @@ pub mod spark {
 
 pub use client::SparkClient;
 pub use session::{SparkSessionBuilder, SparkSession};
+
+#[cfg(test)]
+mod test_utils;

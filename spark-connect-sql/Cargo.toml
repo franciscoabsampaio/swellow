@@ -10,13 +10,14 @@ repository.workspace = true
 [dependencies]
 arrow = { workspace = true }
 arrow-ipc = { workspace = true }
+chrono = { version = "0.4.42", optional = true }
 futures-util = "0.3.31"
 http-body = "1.0.1"
 prost = "0.14.1"
 prost-types = "0.14.1"
 regex = "1.11.3"
 tokio = { workspace = true }
-tonic = { version = "0.14.2" }
+tonic = { version = "0.14.2", optional = true }
 tonic-prost = "0.14.2"
 tower = "0.5.2"
 url = "2.5.7"
@@ -29,4 +30,12 @@ tonic-prost-build = "0.14.2"
 testcontainers = { version = "0.25.0", features = ["blocking"] }
 
 [features]
-tls = []
+default = [
+  "tonic/default",
+]
+chrono = [
+    "chrono/default"
+]
+tls = [
+  "tonic/tls-connect-info",
+]

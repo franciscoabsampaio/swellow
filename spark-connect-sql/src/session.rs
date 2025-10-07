@@ -4,6 +4,8 @@ use crate::error::SparkError;
 use crate::middleware::HeaderInterceptor;
 use crate::spark;
 use crate::spark::spark_connect_service_client::SparkConnectServiceClient;
+use crate::spark::expression::Literal;
+use crate::sql::SqlQueryBuilder;
 
 use arrow::record_batch::RecordBatch;
 use std::sync::Arc;
@@ -72,12 +74,16 @@ impl SparkSession {
     }
 
     /// Execute a SQL query and return a plan (lazy).
-    pub async fn sql(&self, query: &str) -> Result<spark::Plan, SparkError> {
+    pub async fn sql(
+        &self,
+        query: &str,
+        params: Vec<Literal>
+    ) -> Result<spark::Plan, SparkError> {
         let sql_cmd = spark::command::CommandType::SqlCommand(
             spark::SqlCommand {
                 sql: query.to_string(),
                 args: Default::default(),
-                pos_args: vec![],
+                pos_args: params,
             },
         );
 
@@ -93,6 +99,14 @@ impl SparkSession {
         Ok(spark::Plan {
             op_type: Some(spark::plan::OpType::Root(result.relation()?)),
         })
+    }
+
+    /// Alternative query interface
+    pub async fn query(
+        &self,
+        query: &str,
+    ) -> SqlQueryBuilder<'_> {
+        SqlQueryBuilder::new(&self, query)
     }
 
     /// Collect the results from a lazy plan
@@ -140,7 +154,7 @@ mod tests {
     
     use super::*;
     
-    use arrow::array::Int32Array;
+    use arrow::array::{Int32Array, StringArray};
     use regex::Regex;
 
     #[tokio::test]
@@ -177,7 +191,7 @@ mod tests {
 
         // Act: Execute a simple SQL query.
         let lazy_plan = session
-            .sql("SELECT 1 AS id, 'hello' AS text")
+            .sql("SELECT 1 AS id, 'hello' AS text", vec![])
             .await
             .expect("SQL query failed");
         let batches = session
@@ -198,5 +212,38 @@ mod tests {
             .downcast_ref::<Int32Array>()
             .expect("Column 0 should be an Int32Array");
         assert_eq!(id_col.value(0), 1);
+    }
+    
+    #[tokio::test]
+    async fn test_sql_query_builder_bind() -> Result<(), SparkError> {
+        let session = setup_session().await?;
+
+        // Use SqlQueryBuilder and bind parameters
+        let batches = session
+            .query("SELECT ? AS id, ? AS text")
+            .await
+            .bind(42_i32)
+            .bind("world")
+            .execute()
+            .await?;
+
+        assert_eq!(batches.len(), 1);
+        let batch = &batches[0];
+        assert_eq!(batch.num_rows(), 1);
+        assert_eq!(batch.num_columns(), 2);
+
+        let id_col = batch.column(0)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .unwrap();
+        assert_eq!(id_col.value(0), 42);
+
+        let text_col = batch.column(1)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert_eq!(text_col.value(0), "world");
+
+        Ok(())
     }
 }
