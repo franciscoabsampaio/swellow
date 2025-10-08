@@ -178,7 +178,7 @@ pub async fn migrate(
             }
 
             // Execute migration
-            tracing::info!("{direction.verb()} to version {version_id}...");
+            tracing::info!("{} to version {}...", direction.verb(), version_id);
             backend.execute_sql_script(&file_path).await?;
 
             // Update records' status
@@ -191,10 +191,10 @@ pub async fn migrate(
 
     if flag_dry_run {
         backend.rollback().await?;
-        tracing::info!("Dry run completed.");
+        tracing::info!("Dry run completed - transaction successfully rolled back.");
     } else {
         backend.commit().await?;
-        tracing::info!("Migration completed.");
+        tracing::info!("Migration completed - transaction successfully committed.");
     }
 
     Ok(())

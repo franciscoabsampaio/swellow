@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
 
     let db_connection_string: String = args.db_connection_string;
     let migration_directory: String = args.migration_directory;
-    let mut backend = args.engine.into_backend(db_connection_string)?;
+    let mut backend = args.engine.into_backend(db_connection_string).await?;
 
     ux::setup_logging(args.verbose, args.quiet);
 

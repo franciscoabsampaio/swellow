@@ -1,5 +1,5 @@
 use super::{DbEngine, file_checksum};
-use arrow::{self, array::Array, array::RecordBatch};
+use arrow::{self, array::Array, array::Int64Array, array::RecordBatch};
 use spark_connect_sql as spark;
 use std::path;
 
@@ -22,7 +22,7 @@ pub struct SparkEngine {
 
 
 impl SparkEngine {
-    pub async fn new(conn_str: String, catalog: SparkCatalog) -> anyhow::Result<Self, spark::error::SparkError> {
+    pub async fn new(conn_str: String, catalog: SparkCatalog) -> anyhow::Result<Self, spark::SparkError> {
         return Ok(SparkEngine {
             catalog: catalog,
             session: spark::SparkSessionBuilder::new(&conn_str).build().await?
@@ -30,8 +30,7 @@ impl SparkEngine {
     }
 
     async fn sql(&mut self, sql: &str) -> anyhow::Result<Vec<RecordBatch>> {
-        let plan = self.session.sql(sql).await?;
-        Ok(self.session.collect(plan).await?)
+        Ok(self.session.query(sql).execute().await?)
     }
 
     /// Fetch all rows for a single i64 column
@@ -70,8 +69,7 @@ impl DbEngine for SparkEngine {
             SparkCatalog::Iceberg => "ICEBERG",
         };
 
-        let create_table_sql = format!(
-            r#"
+        self.session.query("
             CREATE TABLE IF NOT EXISTS swellow_records (
                 version_id BIGINT,
                 object_type STRING,
@@ -82,12 +80,10 @@ impl DbEngine for SparkEngine {
                 dtm_created_at TIMESTAMP,
                 dtm_updated_at TIMESTAMP
             )
-            USING {}
-            "#,
-            using_clause
-        );
-
-        self.session.sql(&create_table_sql).await?;
+            USING ?")
+            .bind(using_clause)
+            .execute()
+            .await?;
 
         Ok(())
     }
@@ -97,24 +93,33 @@ impl DbEngine for SparkEngine {
     }
 
     async fn execute(&mut self, sql: &str) -> anyhow::Result<()> {
-        self.session.sql(sql).await?;
+        self.sql(sql).await?;
         Ok(())
     }
 
     /// Fetch an optional single column value
     async fn fetch_optional_i64(&mut self, sql: &str) -> anyhow::Result<Option<i64>> {
-        let batches = self.session.sql(sql).await?;
+        let batches: Vec<RecordBatch> = self.sql(sql).await?;
 
-        if let Some(mut cursor) = cursor_opt {
-            if let Some(mut row) = cursor.next_row()? {
-                let mut buf = Nullable::<i64>::null();
-                row.get_data(1, &mut buf)?;
-        
-                return Ok(buf.into_opt());
-            }
+        // If no batches returned, return None
+        let first_batch = match batches.first() {
+            Some(batch) => batch,
+            None => return Ok(None),
+        };
+
+        // If the batch has no columns, return None
+        let first_column = match first_batch.column(0).as_any().downcast_ref::<Int64Array>() {
+            Some(col) => col,
+            None => anyhow::bail!("Expected first column to be Int64Array"),
+        };
+
+        // If column is empty, return None
+        if first_column.is_empty() {
+            return Ok(None);
         }
 
-        Ok(None)
+        // Return the first value
+        Ok(Some(first_column.value(0)))
     }
 
     async fn acquire_lock(&mut self) -> anyhow::Result<()> {
@@ -144,14 +149,14 @@ impl DbEngine for SparkEngine {
     }
 
     async fn disable_records(&mut self, current_version_id: i64) -> anyhow::Result<()> {
-        self.session.sql(
-            r#"
+        self.session.query(r#"
             UPDATE swellow_records
             SET status='DISABLED'
             WHERE version_id > ?
-            "#,
-            &current_version_id
-        ).await?;
+        "#)
+            .bind(current_version_id)
+            .execute()
+            .await?;
 
         Ok(())
     }
@@ -164,7 +169,7 @@ impl DbEngine for SparkEngine {
         version_id: i64,
         file_path: &path::PathBuf
     ) -> anyhow::Result<()> {
-        self.session.sql(&format!(r#"
+        self.session.query(r#"
             INSERT INTO swellow_records(
                 object_type,
                 object_name_before,
@@ -185,27 +190,30 @@ impl DbEngine for SparkEngine {
             DO UPDATE SET
                 status = EXCLUDED.status,
                 checksum = EXCLUDED.checksum
-        "#,
-            object_type.to_string(),
-            object_name_before.to_string(),
-            object_name_after.to_string(),
-            version_id,
-            file_checksum(&file_path)?,
-        )).await?;
+        "#)
+            .bind(object_type.to_string())
+            .bind(object_name_before.to_string())
+            .bind(object_name_after.to_string())
+            .bind(version_id)
+            .bind(file_checksum(&file_path)?)
+            .execute()
+            .await?;
 
         Ok(())
     }
 
     async fn update_record(&mut self, status: &str, version_id: i64) -> anyhow::Result<()> {
-        self.session.sql(&format!(
-            r#"
+        self.session.query(r#"
             UPDATE swellow_records
             SET
                 status={}
             WHERE
                 version_id={}
-            "#, status, version_id
-        )).await?;
+        "#)
+            .bind(status)
+            .bind(version_id)
+            .execute()
+            .await?;
         
         Ok(())
     }
