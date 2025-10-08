@@ -54,7 +54,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       
       - name: Test crate spark-connect-sql
-        run: cargo test -p spark-connect-sql
+        run: |
+          cargo test -p spark-connect-sql
+          cargo test -p spark-connect-sql --doc
 
   build-binaries:
     needs: [tag-version]

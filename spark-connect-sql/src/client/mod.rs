@@ -1,10 +1,14 @@
-use crate::builder::ChannelBuilder;
-use crate::error::SparkError;
-use crate::handlers::{AnalyzeHandler, ExecuteHandler, InterruptHandler};
-use crate::middleware::HeaderInterceptor;
+mod builder;
+mod handlers;
+mod middleware;
+
+pub use self::builder::ChannelBuilder;
+pub use self::middleware::HeaderInterceptor;
+use self::handlers::{AnalyzeHandler, ExecuteHandler, InterruptHandler};
 use crate::spark;
 use crate::spark::spark_connect_service_client::SparkConnectServiceClient;
 use crate::spark::execute_plan_response::ResponseType;
+use crate::SparkError;
 
 use arrow::array::RecordBatch;
 use std::sync::Arc;
@@ -14,15 +18,15 @@ use tonic::transport::Channel;
 use uuid;
 
 
-/// Utility type to reduce boilerplate
+/// Utility type to reduce boilerplate.
 type InterceptedChannel = tonic::service::interceptor::InterceptedService<Channel, HeaderInterceptor>;
 
 
-/// The minimal Spark client, used internally by `SparkSession`.
+/// The Spark client used internally by [`SparkSession`](crate::SparkSession).
 #[derive(Clone, Debug)]
 pub struct SparkClient {
     stub: Arc<RwLock<SparkConnectServiceClient<InterceptedChannel>>>,
-    builder: ChannelBuilder,
+    pub(crate) builder: ChannelBuilder,
     user_context: Option<spark::UserContext>,
     use_reattachable_execute: bool,
     session_id: String,
@@ -64,26 +68,26 @@ impl SparkClient {
         self.session_id.to_string()
     }
 
-    /// Return the spark version
+    /// Return the spark version.
     pub fn spark_version(&self) -> Result<String, SparkError> {
         self.handler_analyze.spark_version.to_owned().ok_or_else(|| {
             SparkError::AnalysisException("Spark Version response is empty".to_string())
         })
     }
 
-    /// Return interrupt ids
+    /// Return interrupt ids.
     pub fn interrupted_ids(&self) -> Vec<String> {
         self.handler_interrupt.interrupted_ids.to_owned()
     }
 
-    /// Return relation response
+    /// Return relation response.
     pub fn relation(&self) -> Result<spark::Relation, SparkError> {
         self.handler_execute.relation.to_owned().ok_or_else(|| {
             SparkError::AnalysisException("Relation response is empty".to_string())
         })
     }
 
-    /// Return batches in response handler
+    /// Return batches in response handler.
     pub fn batches(&self) -> Vec<RecordBatch> {
         self.handler_execute.batches.to_owned()
     }
@@ -98,6 +102,7 @@ impl SparkClient {
         Ok(())
     }
 
+    /// Execute an [analyze request](crate::spark::analyze_plan_request::Analyze).
     pub async fn analyze(
         &mut self,
         analyze: spark::analyze_plan_request::Analyze,
@@ -173,6 +178,7 @@ impl SparkClient {
         Ok(())
     }
 
+    /// Execute an [interrupt request](crate::spark::InterruptRequest).
     pub async fn interrupt(
         &mut self,
         interrupt_type: spark::interrupt_request::InterruptType,
@@ -219,7 +225,7 @@ impl SparkClient {
     }
     
 
-    /// Execute a plan request
+    /// Execute a [plan execution request](crate::spark::ExecutePlanRequest).
     pub async fn execute_plan(
         &mut self,
         plan: spark::Plan
@@ -307,6 +313,7 @@ impl SparkClient {
         Ok(())
     }
 
+    /// Execute an [execution reattachment request](crate::spark::ReattachExecuteRequest).
     async fn reattach(&mut self) -> Result<(), SparkError> {
         let request = spark::ReattachExecuteRequest {
             session_id: self.session_id(),

@@ -1,5 +1,4 @@
-//! Implementation of ChannelBuilder
-use crate::error::SparkError;
+use crate::SparkError;
 
 use std::collections::HashMap;
 use std::env;
@@ -11,21 +10,37 @@ pub(crate) type Host = String;
 pub(crate) type Port = u16;
 pub(crate) type UrlParse = (Host, Port, Option<HashMap<String, String>>);
 
-/// ChannelBuilder validates a connection string
-/// based on the requirements from [Spark Documentation](https://github.com/apache/spark/blob/master/connector/connect/docs/client-connection-string.md)
+/// Parses and validates Spark Connect connection strings.
+///
+/// ChannelBuilder is used internally by SparkSessionBuilder
+/// to configure connections according to the
+/// [Spark Connect client connection specification](https://github.com/apache/spark/blob/master/connector/connect/docs/client-connection-string.md).
+///
+/// It extracts host, port, and optional parameters from URLs of the form:
+///
+/// text /// sc://<host>:<port>/;key1=value1;key2=value2;... ///
+///
+/// Supported keys include:
+/// - token — authentication token (converted to Bearer header)
+/// - user_id — custom user identifier (defaults to $USER)
+/// - user_agent — overrides the default Rust client identifier
+/// - session_id — UUID for reusing a session
+/// - use_ssl — enables TLS (requires tls feature)
+///
+/// End users should prefer [`SparkSessionBuilder`](crate::SparkSessionBuilder) instead.
 #[derive(Clone, Debug)]
 pub struct ChannelBuilder {
-    pub(super) host: Host,
-    pub(super) port: Port,
-    pub(super) session_id: Uuid,
-    pub(super) token: Option<String>,
-    pub(super) user_id: Option<String>,
-    pub(super) user_agent: Option<String>,
-    pub(super) use_ssl: bool,
-    pub(super) headers: Option<HashMap<String, String>>,
+    pub host: Host,
+    pub port: Port,
+    pub(crate) session_id: Uuid,
+    pub(crate) token: Option<String>,
+    pub(crate) user_id: Option<String>,
+    pub(crate) user_agent: Option<String>,
+    pub(crate) use_ssl: bool,
+    pub(crate) headers: Option<HashMap<String, String>>,
 }
 
-/// By default, connects to port 15002 on localhost
+/// By default, connects to port 15002 on localhost.
 impl Default for ChannelBuilder {
     fn default() -> Self {
         let connection = match env::var("SPARK_REMOTE") {
@@ -33,13 +48,64 @@ impl Default for ChannelBuilder {
             Err(_) => "sc://localhost:15002".to_string(),
         };
 
-        ChannelBuilder::create(&connection).unwrap()
+        ChannelBuilder::new(&connection).unwrap()
     }
 }
 
 impl ChannelBuilder {
-    pub fn new() -> Self {
-        ChannelBuilder::default()
+    /// Create builder and validate a connection string.
+    #[allow(unreachable_code)]
+    pub(crate) fn new(connection: &str) -> Result<ChannelBuilder, SparkError> {
+        let (host, port, headers) = ChannelBuilder::parse_connection_string(connection)?;
+
+        let mut channel_builder = ChannelBuilder {
+            host,
+            port,
+            session_id: Uuid::new_v4(),
+            token: None,
+            user_id: ChannelBuilder::create_user_id(None),
+            user_agent: ChannelBuilder::create_user_agent(None),
+            use_ssl: false,
+            headers: None,
+        };
+
+        if let Some(mut headers) = headers {
+            channel_builder.user_id = headers
+                .remove("user_id")
+                .map(|user_id| ChannelBuilder::create_user_id(Some(&user_id)))
+                .unwrap_or_else(|| ChannelBuilder::create_user_id(None));
+
+            channel_builder.user_agent = headers
+                .remove("user_agent")
+                .map(|user_agent| ChannelBuilder::create_user_agent(Some(&user_agent)))
+                .unwrap_or_else(|| ChannelBuilder::create_user_agent(None));
+
+            if let Some(token) = headers.remove("token") {
+                let token = format!("Bearer {token}");
+                channel_builder.token = Some(token.clone());
+                headers.insert("authorization".to_string(), token);
+            }
+
+            if let Some(session_id) = headers.remove("session_id") {
+                channel_builder.session_id = Uuid::from_str(&session_id)?
+            }
+
+            if let Some(use_ssl) = headers.remove("use_ssl") {
+                if use_ssl.to_lowercase() == "true" {
+                    #[cfg(not(feature = "tls"))]
+                    {
+                        panic!("The 'use_ssl' option requires the 'tls' feature, but it's not enabled!");
+                    };
+                    channel_builder.use_ssl = true
+                }
+            };
+
+            if !headers.is_empty() {
+                channel_builder.headers = Some(headers);
+            }
+        }
+
+        Ok(channel_builder)
     }
 
     pub(crate) fn endpoint(&self) -> String {
@@ -138,61 +204,6 @@ impl ChannelBuilder {
 
         Some(headers)
     }
-
-    /// Create and validate a connnection string
-    #[allow(unreachable_code)]
-    pub fn create(connection: &str) -> Result<ChannelBuilder, SparkError> {
-        let (host, port, headers) = ChannelBuilder::parse_connection_string(connection)?;
-
-        let mut channel_builder = ChannelBuilder {
-            host,
-            port,
-            session_id: Uuid::new_v4(),
-            token: None,
-            user_id: ChannelBuilder::create_user_id(None),
-            user_agent: ChannelBuilder::create_user_agent(None),
-            use_ssl: false,
-            headers: None,
-        };
-
-        if let Some(mut headers) = headers {
-            channel_builder.user_id = headers
-                .remove("user_id")
-                .map(|user_id| ChannelBuilder::create_user_id(Some(&user_id)))
-                .unwrap_or_else(|| ChannelBuilder::create_user_id(None));
-
-            channel_builder.user_agent = headers
-                .remove("user_agent")
-                .map(|user_agent| ChannelBuilder::create_user_agent(Some(&user_agent)))
-                .unwrap_or_else(|| ChannelBuilder::create_user_agent(None));
-
-            if let Some(token) = headers.remove("token") {
-                let token = format!("Bearer {token}");
-                channel_builder.token = Some(token.clone());
-                headers.insert("authorization".to_string(), token);
-            }
-
-            if let Some(session_id) = headers.remove("session_id") {
-                channel_builder.session_id = Uuid::from_str(&session_id)?
-            }
-
-            if let Some(use_ssl) = headers.remove("use_ssl") {
-                if use_ssl.to_lowercase() == "true" {
-                    #[cfg(not(feature = "tls"))]
-                    {
-                        panic!("The 'use_ssl' option requires the 'tls' feature, but it's not enabled!");
-                    };
-                    channel_builder.use_ssl = true
-                }
-            };
-
-            if !headers.is_empty() {
-                channel_builder.headers = Some(headers);
-            }
-        }
-
-        Ok(channel_builder)
-    }
 }
 
 #[cfg(test)]
@@ -212,28 +223,28 @@ mod tests {
     fn test_panic_incorrect_url_scheme() {
         let connection = "http://127.0.0.1:15002";
 
-        assert!(ChannelBuilder::create(connection).is_err())
+        assert!(ChannelBuilder::new(connection).is_err())
     }
 
     #[test]
     fn test_panic_missing_url_host() {
         let connection = "sc://:15002";
 
-        assert!(ChannelBuilder::create(connection).is_err())
+        assert!(ChannelBuilder::new(connection).is_err())
     }
 
     #[test]
     fn test_panic_missing_url_port() {
         let connection = "sc://127.0.0.1";
 
-        assert!(ChannelBuilder::create(connection).is_err())
+        assert!(ChannelBuilder::new(connection).is_err())
     }
 
     #[test]
     fn test_settings_builder() {
         let connection = "sc://myhost.com:443/;token=ABCDEFG;user_agent=some_agent;user_id=user123";
 
-        let builder = ChannelBuilder::create(connection).unwrap();
+        let builder = ChannelBuilder::new(connection).unwrap();
 
         assert_eq!("http://myhost.com:443".to_string(), builder.endpoint());
         assert_eq!("Bearer ABCDEFG".to_string(), builder.token.unwrap());
@@ -247,6 +258,6 @@ mod tests {
     fn test_panic_ssl() {
         let connection = "sc://127.0.0.1:443/;use_ssl=true";
 
-        ChannelBuilder::create(connection).unwrap();
+        ChannelBuilder::new(connection).unwrap();
     }
 }

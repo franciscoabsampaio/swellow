@@ -1,9 +1,9 @@
-use crate::error::SparkError;
+use crate::SparkError;
 use arrow::array::RecordBatch;
 use arrow_ipc::reader::StreamReader;
 
 
-pub fn deserialize(stream: &[u8], row_count: i64) -> Result<(Vec<RecordBatch>, isize), SparkError> {
+pub(crate) fn deserialize(stream: &[u8], row_count: i64) -> Result<(Vec<RecordBatch>, isize), SparkError> {
     let reader = StreamReader::try_new(stream, None)?;
     
     let mut batches: Vec<RecordBatch> = vec![];

@@ -3,7 +3,7 @@ use tonic::Code;
 use uuid;
 
 
-/// Different `Spark` Error types
+/// Wraps application errors into a common SparkError enum.
 #[derive(Debug)]
 pub enum SparkError {
     Aborted(String),

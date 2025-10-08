@@ -1,11 +1,11 @@
-use crate::builder::ChannelBuilder;
+use crate::client::ChannelBuilder;
+use crate::client::HeaderInterceptor;
 use crate::client::SparkClient;
-use crate::error::SparkError;
-use crate::middleware::HeaderInterceptor;
 use crate::spark;
 use crate::spark::spark_connect_service_client::SparkConnectServiceClient;
 use crate::spark::expression::Literal;
-use crate::sql::SqlQueryBuilder;
+use crate::query::SqlQueryBuilder;
+use crate::SparkError;
 
 use arrow::record_batch::RecordBatch;
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 use tonic::transport::Channel;
 use tower::ServiceBuilder;
 
-/// Builder for creating remote Spark sessions.
+/// Builder for creating [`SparkSession`] objects.
 #[derive(Clone, Debug)]
 pub struct SparkSessionBuilder {
     channel_builder: ChannelBuilder,
@@ -21,13 +21,12 @@ pub struct SparkSessionBuilder {
 
 impl SparkSessionBuilder {
     pub fn new(connection: &str) -> Self {
-
         let channel_builder =
-            ChannelBuilder::create(connection).expect("Invalid Spark connection string");
+            ChannelBuilder::new(connection).expect("Invalid Spark connection string");
         Self { channel_builder }
     }
 
-    /// Connects to Spark and returns a `SparkSession`.
+    /// Connects to Spark and returns a [`SparkSession`].
     pub async fn build(&self) -> Result<SparkSession, SparkError> {
         let channel = Channel::from_shared(self.channel_builder.endpoint())?
             .connect()
@@ -50,7 +49,6 @@ impl SparkSessionBuilder {
 }
 
 /// Represents an active Spark session.
-/// All queries return Arrow batches directly.
 #[derive(Clone, Debug)]
 pub struct SparkSession {
     client: SparkClient,
@@ -63,17 +61,17 @@ impl SparkSession {
         Self { client, session_id }
     }
 
-    /// Return the session ID
+    /// Return the session ID.
     pub fn session_id(&self) -> String {
         self.session_id.to_string()
     }
 
-    /// Return a clone of the client
+    /// Return a clone of the client.
     pub fn client(&self) -> SparkClient {
         self.client.clone()
     }
 
-    /// Execute a SQL query and return a plan (lazy).
+    /// Execute a SQL query and return a lazy [`plan`](crate::spark::Plan).
     pub async fn sql(
         &self,
         query: &str,
@@ -101,22 +99,23 @@ impl SparkSession {
         })
     }
 
-    /// Alternative query interface
-    pub async fn query(
+    /// Alternative ["sqlx-like"](https://docs.rs/sqlx/latest/sqlx/) query interface.
+    /// Returns a [`SqlQueryBuilder`] to `bind()` parameters and `execute()`.
+    pub fn query(
         &self,
         query: &str,
     ) -> SqlQueryBuilder<'_> {
         SqlQueryBuilder::new(&self, query)
     }
 
-    /// Collect the results from a lazy plan
+    /// Collect the results from a lazy [`plan`](crate::spark::Plan).
     pub async fn collect(&self, plan: spark::Plan) -> Result<Vec<RecordBatch>, SparkError> {
         let mut client = self.client();
 
         Ok(client.execute_plan(plan).await?.batches())
     }
 
-    /// Interrupt all running operations
+    /// Interrupt all running operations.
     pub async fn interrupt_all(&self) -> Result<Vec<String>, SparkError> {
         Ok(
             self.client().interrupt(
@@ -126,7 +125,7 @@ impl SparkSession {
         )
     }
 
-    /// Interrupt a specific operation by ID
+    /// Interrupt a specific operation by ID.
     pub async fn interrupt_operation(&self, op_id: &str) -> Result<Vec<String>, SparkError> {
         Ok(
             self.client().interrupt(
@@ -136,7 +135,7 @@ impl SparkSession {
         )
     }
 
-    /// The version of Spark on which this application is running.
+    /// Request the version of the Spark Connect server.
     pub async fn version(&self) -> Result<String, SparkError> {
         let version = spark::analyze_plan_request::Analyze::SparkVersion(
             spark::analyze_plan_request::SparkVersion {},
@@ -221,7 +220,6 @@ mod tests {
         // Use SqlQueryBuilder and bind parameters
         let batches = session
             .query("SELECT ? AS id, ? AS text")
-            .await
             .bind(42_i32)
             .bind("world")
             .execute()

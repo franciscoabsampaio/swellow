@@ -5,6 +5,29 @@ use crate::spark::DataType;
 #[cfg(feature = "chrono")]
 use chrono::{NaiveDate, NaiveDateTime};
 
+/// A trait that allows automatic conversion of Rust primitives and complex types into Spark data types.
+/// 
+/// # Overview
+/// 
+/// The `ToLiteral` trait provides a unified interface for converting Rust primitive and complex types
+/// into Spark SQL `Literal` values. Implementations of this trait allow seamless and type-safe
+/// construction of Spark literals from native Rust values, supporting both primitive types (such as
+/// integers, floats, booleans, and strings) and complex types (such as arrays, maps, and structs).
+/// 
+/// Special cases are handled for optional types and for date/time types when the `chrono`
+/// feature is enabled.
+///
+/// # Examples
+///
+/// ```rust
+/// use spark_connect_sql::ToLiteral;
+///
+/// let lit = 42i32.to_literal(); // Converts i32 to Literal { literal_type: Some(LiteralType::Integer) }
+/// let lit = "hello".to_literal(); // Converts &str to Literal { literal_type: Some(LiteralType::String) }
+/// ```
+///
+/// This trait is intended for use with the [`query!`] macro and the [`SparkSession::query()`] and [`SparkSession::sql()`] methods
+/// to facilitate construction of parameterized queries.
 pub trait ToLiteral {
     fn to_literal(self) -> Literal;
 }
@@ -15,7 +38,7 @@ impl Literal {
     }
 }
 
-/// Macro to implement ToLiteral for a type mapping to a LiteralType variant
+/// Macro to implement ToLiteral for a type mapping to a LiteralType variant.
 macro_rules! impl_to_literal {
     ($ty:ty => $variant:ident) => {
         impl ToLiteral for $ty {

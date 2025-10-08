@@ -3,15 +3,24 @@ use tonic::{Request, Status};
 use tonic::metadata::{MetadataKey, MetadataValue};
 use tonic::service::Interceptor;
 
-
-/// Interceptor that injects headers into gRPC requests
+/// A lightweight gRPC [`Interceptor`] for injecting static headers into outgoing requests.
+///
+/// Unlike a [`tower::Layer`], this type operates at the client level — it wraps
+/// gRPC calls to attach metadata before transmission, without altering the service stack.
+///
+/// Typically used internally by [`SparkClient`](crate::SparkClient) to attach
+/// authentication tokens or user context to every request.
+///
+/// # Notes
+/// - All headers must be valid gRPC metadata keys and values.
+/// - This interceptor is **cloneable** and cheap to reuse across channels.
 #[derive(Clone, Debug)]
 pub struct HeaderInterceptor {
     headers: HashMap<String, String>,
 }
 
 impl HeaderInterceptor {
-    pub fn new(headers: HashMap<String, String>) -> Self {
+    pub(crate) fn new(headers: HashMap<String, String>) -> Self {
         Self { headers }
     }
 }
