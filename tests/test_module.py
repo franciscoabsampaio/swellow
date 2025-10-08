@@ -1,46 +1,51 @@
-import os
+import docker
 import pytest
+import time
 import swellow
-from testcontainers.postgres import PostgresContainer
-from testcontainers.core.container import DockerContainer
+
+
+def wait_for_log(container, message, timeout=30):
+    start = time.time()
+    while True:
+        logs = container.logs().decode("utf-8")
+        if message in logs:
+            return
+        if time.time() - start > timeout:
+            raise TimeoutError(f"Message '{message}' not found in logs")
+        time.sleep(0.5)
 
 
 @pytest.fixture(scope="module", params=["postgres", "spark-delta", "spark-iceberg"])
 def db_backend(request):
     backend = request.param
 
+    docker_client = docker.from_env()
+
     if backend == "postgres":
-        container = PostgresContainer("postgres:latest")
-        container.start()
-        conn_url = container.get_connection_url()
-
-    elif backend == "spark-delta":
-        container = (
-            DockerContainer("franciscoabsampaio/spark-connect:latest")
-            .with_exposed_ports(15002)  # Hive Thrift Server port
+        image = docker_client.images.pull("postgres", tag="17.6")
+        container = docker_client.containers.run(
+            image,
+            detach=True,
+            environment={"POSTGRES_PASSWORD": "postgres"},
+            ports={'5432/tcp': 5432},
         )
-        container.start()
-        host = container.get_container_host_ip()
-        port = container.get_exposed_port(15002)
-        conn_url = f"sc://{host}:{port}/;token=ABCDEFG;user_agent=some_agent;user_id=user123"
+        time.sleep(5)
+        conn_url = "postgresql://postgres:postgres@localhost:5432/postgres"
 
-    elif backend == "spark-iceberg":
-        container = (
-            DockerContainer("franciscoabsampaio/spark-connect:latest")
-            .with_exposed_ports(15002)
+    elif backend in ["spark-delta", "spark-iceberg"]:
+        image = docker_client.images.pull("franciscoabsampaio/spark-connect", tag="latest")
+        container = docker_client.containers.run(
+            image,
+            detach=True,
+            ports={'15002/tcp': 15002}
         )
-        container.start()
-        host = container.get_container_host_ip()
-        port = container.get_exposed_port(15002)
-        conn_url = f"sc://{host}:{port}/;token=ABCDEFG;user_agent=some_agent;user_id=user123"
+        wait_for_log(container, message="Spark Connect server started at:")
+        conn_url = "sc://localhost:15002"
 
     else:
         raise ValueError(f"Unknown backend {backend}")
 
-    os.environ["DB_CONN"] = conn_url
-    print(conn_url)
-
-    yield backend
+    yield conn_url, backend
 
     container.stop()
 
@@ -50,23 +55,23 @@ def db_backend(request):
 def test_missing_up(db_backend):
     with pytest.raises(FileNotFoundError):
         swellow.up(
-            db=os.getenv("DB_CONN"),
-            directory=f"./tests/{db_backend}/missing_up",
-            engine=db_backend
+            db=db_backend[0],
+            directory=f"./tests/{db_backend[1]}/missing_up",
+            engine=db_backend[1]
         )
 
 # Test missing down
 def test_missing_down(db_backend):
     swellow.up(
-        db=os.getenv("DB_CONN"),
-        directory=f"./tests/{db_backend}/missing_down",
-        engine=db_backend
+        db=db_backend[0],
+        directory=f"./tests/{db_backend[1]}/missing_down",
+        engine=db_backend[1]
     )
     with pytest.raises(FileNotFoundError):
         swellow.down(
-            db=os.getenv("DB_CONN"),
-            directory=f"./tests/{db_backend}/missing_down",
-            engine=db_backend
+            db=db_backend[0],
+            directory=f"./tests/{db_backend[1]}/missing_down",
+            engine=db_backend[1]
         )
 
 # Test migration+rollback:
@@ -74,13 +79,13 @@ def test_migrate_and_rollback(db_backend):
     # Migrate and rollback to/from progressively higher versions.
     for i in range(3):
         swellow.up(
-            db=os.getenv("DB_CONN"),
-            directory=f"./tests/{db_backend}/migrate_and_rollback",
-            engine=db_backend,
+            db=db_backend[0],
+            directory=f"./tests/{db_backend[1]}/migrate_and_rollback",
+            engine=db_backend[1],
             target_version_id=i+1
         )
         swellow.down(
-            db=os.getenv("DB_CONN"),
-            directory=f"./tests/{db_backend}/migrate_and_rollback",
-            engine=db_backend
+            db=db_backend[0],
+            directory=f"./tests/{db_backend[1]}/migrate_and_rollback",
+            engine=db_backend[1]
         )

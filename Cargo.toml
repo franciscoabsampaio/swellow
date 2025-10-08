@@ -11,6 +11,7 @@ license = "Apache-2.0"
 repository = "https://github.com/franciscoabsampaio/swellow"
 
 [workspace.dependencies]
+anyhow = "1.0.100"
 arrow = "56.2.0"
 arrow-ipc = "56.2.0"
 tokio = { version = "1.47", features = ["rt-multi-thread", "macros"] }
