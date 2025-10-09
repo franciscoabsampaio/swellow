@@ -1,3 +1,29 @@
+//! Internal gRPC client abstraction for the Spark Connect protocol.
+//!
+//! This module defines [`SparkClient`], the low-level asynchronous client that
+//! manages communication with a Spark Connect server over gRPC.
+//!
+//! <div class="warning">
+//! 
+//! End users are advised <b>not</b> to construct or use `SparkClient` directly — use
+//! [`SparkSession`](crate::SparkSession) instead, which provides a high-level API.
+//! 
+//! </div>
+//!
+//! # Overview
+//!
+//! `SparkClient` wraps the generated [`SparkConnectServiceClient`] and provides:
+//!
+//! - Connection setup (via [`ChannelBuilder`]);
+//! - Metadata injection (via [`HeaderInterceptor`]);
+//! - Structured request/response handling for:
+//!   - [`Analyze` plan](crate::spark::analyze_plan_request::Analyze);
+//!   - [Execution `Plan`](crate::spark::Plan);
+//!   - [`Interrupt`](crate::spark::interrupt_request::Interrupt);
+//!   - Reattach/release semantics.
+//!
+//! Each call validates the active Spark session and maps server responses into
+//! safe Rust types or [`SparkError`] values.
 mod builder;
 mod handlers;
 mod middleware;
@@ -17,11 +43,45 @@ use tonic::codec::Streaming;
 use tonic::transport::Channel;
 use uuid;
 
-
-/// Utility type to reduce boilerplate.
+/// Utility type alias for a gRPC channel with an attached interceptor.
 type InterceptedChannel = tonic::service::interceptor::InterceptedService<Channel, HeaderInterceptor>;
 
-
+/// Asynchronous gRPC client for Spark Connect.
+///
+/// `SparkClient` manages RPC calls, session validation, and response
+/// interpretation. It is used internally by [`SparkSession`](crate::SparkSession)
+/// to execute plans and perform analysis or interrupt operations.
+///
+/// <div class="warning">
+/// This struct is <b>not</b> intended for direct use; it exposes low-level details
+/// of the Spark Connect protocol.
+/// </div>
+///
+/// # Lifecycle
+///
+/// - Constructed indirectly through [`SparkSessionBuilder`](crate::SparkSessionBuilder);
+/// - Maintains session context (e.g. `session_id`, `user_context`);
+/// - Automatically attaches metadata headers.
+///
+/// # Examples
+///
+/// ```
+/// use spark_connect::{SparkSessionBuilder, spark};
+///
+/// # tokio_test::block_on(async {
+/// let session = SparkSessionBuilder::new("sc://localhost:15002").build().await?;
+/// let mut client = session.client();
+///
+/// client
+///     .analyze(spark::analyze_plan_request::Analyze::SparkVersion(
+///         spark::analyze_plan_request::SparkVersion {}
+///     ))
+///     .await?;
+///
+/// println!("Spark version: {:?}", client.spark_version()?);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// # });
+/// ```
 /// The Spark client used internally by [`SparkSession`](crate::SparkSession).
 #[derive(Clone, Debug)]
 pub struct SparkClient {
@@ -38,6 +98,9 @@ pub struct SparkClient {
 }
 
 impl SparkClient {
+    /// Creates a new client from a gRPC stub and a configured [`ChannelBuilder`].
+    ///
+    /// Typically called internally by [`SparkSessionBuilder`](crate::SparkSessionBuilder).
     pub fn new(
         stub: Arc<RwLock<SparkConnectServiceClient<InterceptedChannel>>>,
         builder: ChannelBuilder,
@@ -63,35 +126,38 @@ impl SparkClient {
         }
     }
 
-    /// Return session id
+    /// Returns the session ID associated with this client.
     pub fn session_id(&self) -> String {
         self.session_id.to_string()
     }
 
-    /// Return the spark version.
+    /// Returns the Spark version obtained from the last analyze request.
     pub fn spark_version(&self) -> Result<String, SparkError> {
-        self.handler_analyze.spark_version.to_owned().ok_or_else(|| {
-            SparkError::AnalysisException("Spark Version response is empty".to_string())
-        })
+        self.handler_analyze
+            .spark_version
+            .to_owned()
+            .ok_or_else(|| SparkError::AnalysisException("Spark Version response is empty".to_string()))
     }
 
-    /// Return interrupt ids.
+    /// Returns the list of operation IDs that were interrupted.
     pub fn interrupted_ids(&self) -> Vec<String> {
         self.handler_interrupt.interrupted_ids.to_owned()
     }
 
-    /// Return relation response.
+    /// Returns the last relation received in an [`ExecutePlanResponse`](crate::spark::ExecutePlanResponse).
     pub fn relation(&self) -> Result<spark::Relation, SparkError> {
-        self.handler_execute.relation.to_owned().ok_or_else(|| {
-            SparkError::AnalysisException("Relation response is empty".to_string())
-        })
+        self.handler_execute
+            .relation
+            .to_owned()
+            .ok_or_else(|| SparkError::AnalysisException("Relation response is empty".to_string()))
     }
 
-    /// Return batches in response handler.
+    /// Returns all record batches accumulated during the last execution.
     pub fn batches(&self) -> Vec<RecordBatch> {
         self.handler_execute.batches.to_owned()
     }
 
+    /// Compares a session_id to the current session's id.
     fn validate_session(&self, session_id: &str) -> Result<(), SparkError> {
         if self.session_id() != session_id {
             return Err(SparkError::AnalysisException(format!(
@@ -102,7 +168,8 @@ impl SparkClient {
         Ok(())
     }
 
-    /// Execute an [analyze request](crate::spark::analyze_plan_request::Analyze).
+    /// Sends an [`AnalyzePlanRequest`](crate::spark::AnalyzePlanRequest)
+    /// to the Spark Connect server and updates the internal analysis handler.
     pub async fn analyze(
         &mut self,
         analyze: spark::analyze_plan_request::Analyze,
@@ -178,7 +245,9 @@ impl SparkClient {
         Ok(())
     }
 
-    /// Execute an [interrupt request](crate::spark::InterruptRequest).
+    /// Sends an [`InterruptRequest`](crate::spark::InterruptRequest) to Spark.
+    ///
+    /// Used to stop long-running operations or cancel all running executions.
     pub async fn interrupt(
         &mut self,
         interrupt_type: spark::interrupt_request::InterruptType,
@@ -225,7 +294,12 @@ impl SparkClient {
     }
     
 
-    /// Execute a [plan execution request](crate::spark::ExecutePlanRequest).
+    /// Executes a query plan and streams results from Spark.
+    ///
+    /// This method handles deserialization, streaming,
+    /// and optional *reattachment* for fault-tolerant execution.
+    ///
+    /// The resulting record batches can be retrieved with [`batches()`](Self::batches).
     pub async fn execute_plan(
         &mut self,
         plan: spark::Plan

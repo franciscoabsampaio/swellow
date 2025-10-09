@@ -20,13 +20,14 @@ use chrono::{NaiveDate, NaiveDateTime};
 /// # Examples
 ///
 /// ```rust
-/// use spark_connect_sql::ToLiteral;
+/// use spark_connect::ToLiteral;
 ///
 /// let lit = 42i32.to_literal(); // Converts i32 to Literal { literal_type: Some(LiteralType::Integer) }
 /// let lit = "hello".to_literal(); // Converts &str to Literal { literal_type: Some(LiteralType::String) }
 /// ```
 ///
-/// This trait is intended for use with the [`query!`] macro and the [`SparkSession::query()`] and [`SparkSession::sql()`] methods
+/// This trait is intended for use with the [`SparkSession::query()`](crate::SparkSession::query)
+/// and [`SparkSession::sql()`](crate::SparkSession::sql) methods
 /// to facilitate construction of parameterized queries.
 pub trait ToLiteral {
     fn to_literal(self) -> Literal;

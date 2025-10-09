@@ -2838,7 +2838,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spark-connect-sql"
+name = "spark-connect"
 version = "0.1.0"
 dependencies = [
  "arrow",
@@ -3129,7 +3129,7 @@ dependencies = [
  "odbc-api",
  "phf",
  "sha2",
- "spark-connect-sql",
+ "spark-connect",
  "sqlparser",
  "sqlx",
  "tokio",

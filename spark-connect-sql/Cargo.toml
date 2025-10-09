@@ -1,6 +1,6 @@
 [package]
 keywords = ["spark", "connect", "sql", "spark_connect", "spark_connect_sql"]
-name = "spark-connect-sql"
+name = "spark-connect"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true

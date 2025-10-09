@@ -1,6 +1,6 @@
 use super::{DbEngine, file_checksum};
 use arrow::{self, array::Array, array::Int64Array, array::RecordBatch};
-use spark_connect_sql as spark;
+use spark_connect as spark;
 use std::path;
 
 

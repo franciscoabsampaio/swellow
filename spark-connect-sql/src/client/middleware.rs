@@ -8,7 +8,7 @@ use tonic::service::Interceptor;
 /// Unlike a [`tower::Layer`], this type operates at the client level — it wraps
 /// gRPC calls to attach metadata before transmission, without altering the service stack.
 ///
-/// Typically used internally by [`SparkClient`](crate::SparkClient) to attach
+/// Used internally by [`SparkClient`](crate::SparkClient) to attach
 /// authentication tokens or user context to every request.
 ///
 /// # Notes

@@ -1,3 +1,5 @@
+#![allow(rustdoc::invalid_html_tags)]
+
 use crate::SparkError;
 
 use std::collections::HashMap;
@@ -18,14 +20,14 @@ pub(crate) type UrlParse = (Host, Port, Option<HashMap<String, String>>);
 ///
 /// It extracts host, port, and optional parameters from URLs of the form:
 ///
-/// text /// sc://<host>:<port>/;key1=value1;key2=value2;... ///
+/// `sc://<host>:<port>/;key1=value1;key2=value2;...`
 ///
 /// Supported keys include:
-/// - token — authentication token (converted to Bearer header)
-/// - user_id — custom user identifier (defaults to $USER)
-/// - user_agent — overrides the default Rust client identifier
-/// - session_id — UUID for reusing a session
-/// - use_ssl — enables TLS (requires tls feature)
+/// - token — authentication token (converted to Bearer header);
+/// - user_id — custom user identifier (defaults to $USER);
+/// - user_agent — overrides the default Rust client identifier;
+/// - session_id — UUID for reusing a session;
+/// - use_ssl — enables TLS (requires `tls` feature).
 ///
 /// End users should prefer [`SparkSessionBuilder`](crate::SparkSessionBuilder) instead.
 #[derive(Clone, Debug)]

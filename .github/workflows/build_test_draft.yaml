@@ -36,7 +36,7 @@ jobs:
           git tag -f v${{ steps.get_version.outputs.version }}
           git push -f origin v${{ steps.get_version.outputs.version }}
 
-  test-spark-connect-sql:
+  test-spark-connect:
     runs-on: ubuntu-latest
     services:
       docker:
@@ -53,10 +53,10 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
       
-      - name: Test crate spark-connect-sql
+      - name: Test crate spark-connect
         run: |
-          cargo test -p spark-connect-sql
-          cargo test -p spark-connect-sql --doc
+          cargo test -p spark-connect
+          cargo test -p spark-connect --doc
 
   build-binaries:
     needs: [tag-version]

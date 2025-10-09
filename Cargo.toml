@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "swellow-rs",
-    "spark-connect-sql"
+    "spark-connect"
 ]
 
 [workspace.package]

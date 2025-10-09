@@ -1,3 +1,27 @@
+//! High-level user-facing interface for Spark Connect.
+//!
+//! This module provides [`SparkSession`] — the main entry point for interacting
+//! with a Spark Connect server. It exposes a familiar API surface inspired by
+//! PySpark and Scala's `SparkSession`, while delegating low-level gRPC work to
+//! [`SparkClient`](crate::SparkClient).
+//!
+//! # Typical usage
+//!
+//! ```
+//! use spark_connect_rs::SparkSessionBuilder;
+//!
+//! # tokio_test::block_on(async {
+//! let session = SparkSessionBuilder::new("sc://localhost:15002")
+//!     .build()
+//!     .await
+//!     .expect("failed to connect");
+//!
+//! println!("Connected to Spark session: {}", session.session_id());
+//! # });
+//! ```
+//!
+//! The `SparkSession` provides an ergonomic API for executing SQL, analyzing
+//! plans, and inspecting results — without exposing internal client plumbing.
 use crate::client::ChannelBuilder;
 use crate::client::HeaderInterceptor;
 use crate::client::SparkClient;
@@ -13,20 +37,48 @@ use tokio::sync::RwLock;
 use tonic::transport::Channel;
 use tower::ServiceBuilder;
 
-/// Builder for creating [`SparkSession`] objects.
+/// Builder for creating [`SparkSession`] instances.
+///
+/// Configures a connection to a Spark Connect endpoint
+/// following the URL format defined by
+/// [Apache Spark's client connection spec](https://github.com/apache/spark/blob/master/connector/connect/docs/client-connection-string.md).
+///
+/// # Example
+///
+/// ```
+/// use spark_connect_rs::SparkSessionBuilder;
+///
+/// # tokio_test::block_on(async {
+/// let session = SparkSessionBuilder::new("sc://localhost:15002")
+///     .build()
+///     .await
+///     .unwrap();
+///
+/// println!("Session ID: {}", session.session_id());
+/// # });
+/// ```
 #[derive(Clone, Debug)]
 pub struct SparkSessionBuilder {
     channel_builder: ChannelBuilder,
 }
 
 impl SparkSessionBuilder {
+    /// Creates a new builder from a Spark Connect connection string.
+    ///
+    /// The connection string must follow the format:
+    /// `sc://<host>:<port>/;key1=value1;key2=value2;...`
     pub fn new(connection: &str) -> Self {
         let channel_builder =
             ChannelBuilder::new(connection).expect("Invalid Spark connection string");
         Self { channel_builder }
     }
 
-    /// Connects to Spark and returns a [`SparkSession`].
+    /// Establishes a connection and returns a ready-to-use [`SparkSession`].
+    ///
+    /// This method performs:
+    /// - gRPC channel setup;
+    /// - Metadata interceptor attachment;
+    /// - [`SparkClient`](crate::SparkClient) initialization.
     pub async fn build(&self) -> Result<SparkSession, SparkError> {
         let channel = Channel::from_shared(self.channel_builder.endpoint())?
             .connect()
@@ -48,7 +100,28 @@ impl SparkSessionBuilder {
     }
 }
 
-/// Represents an active Spark session.
+/// Represents a logical connection to a Spark Connect backend.
+///
+/// `SparkSession` is the main entry point for executing commands, analyzing
+/// queries, and retrieving results from Spark Connect.
+///
+/// It wraps an internal [`SparkClient`](crate::SparkClient) and tracks session
+/// state (such as the `session_id`).
+///
+/// # Examples
+///
+/// ```
+/// use spark_connect_rs::SparkSessionBuilder;
+///
+/// # tokio_test::block_on(async {
+/// let session = SparkSessionBuilder::new("sc://localhost:15002")
+///     .build()
+///     .await
+///     .unwrap();
+///
+/// println!("Session ID: {}", session.session_id());
+/// # });
+/// ```
 #[derive(Clone, Debug)]
 pub struct SparkSession {
     client: SparkClient,
@@ -56,18 +129,25 @@ pub struct SparkSession {
 }
 
 impl SparkSession {
+    /// Creates a new session from a [`SparkClient`].
+    ///
+    /// Usually invoked internally by [`SparkSessionBuilder::build`].
     pub fn new(client: SparkClient) -> Self {
         let session_id = client.session_id().to_string();
         Self { client, session_id }
     }
 
-    /// Return the session ID.
+     /// Returns the unique session identifier for this connection.
     pub fn session_id(&self) -> String {
         self.session_id.to_string()
     }
 
-    /// Return a clone of the client.
-    pub fn client(&self) -> SparkClient {
+    /// Returns a mutable reference to the underlying [`SparkClient`].
+    ///
+    /// While exposed for advanced use cases, typical consumers are advised to rely on
+    /// higher-level abstractions in `SparkSession` instead of manipulating the
+    /// client directly.
+    pub(crate) fn client(&self) -> SparkClient {
         self.client.clone()
     }
 
@@ -150,8 +230,7 @@ impl SparkSession {
 #[cfg(test)]
 mod tests {
     use crate::test_utils::test_utils::setup_session;
-    
-    use super::*;
+    use crate::SparkError;
     
     use arrow::array::{Int32Array, StringArray};
     use regex::Regex;

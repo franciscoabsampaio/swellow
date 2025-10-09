@@ -12,7 +12,7 @@
 //! # Example
 //!
 //! ```
-//! use spark_connect_sql::SparkSessionBuilder;
+//! use spark_connect::SparkSessionBuilder;
 //! use arrow::array::RecordBatch;
 //!
 //! # tokio_test::block_on(async {
@@ -43,7 +43,6 @@
 //! # See also
 //! - [`ToLiteral`] — converts native Rust types into Spark literals.
 //! - [`SparkSession::sql`] — executes parameterized SQL queries directly.
-//! - [`query!`] macro — compile-time helper for concise query execution.
 //!
 //! # Errors
 //!
