@@ -102,10 +102,8 @@ sc://10.0.0.5:15002;session_id=abc123;user_agent=my-app
 - [Apache Spark Connect documentation](https://spark.apache.org/docs/latest/spark-connect.html);
 - [Apache Arrow RecordBatch specification](https://arrow.apache.org/docs/format/Columnar.html).
 
-## Disclaimer:
+---
+© 2025 Francisco A. B. Sampaio. Licensed under the Apache 2.0 License.
 
 This project is not affiliated with, endorsed by, or sponsored by the Apache Software Foundation.
 “Apache”, “Apache Spark”, and “Spark Connect” are trademarks of the Apache Software Foundation.
-
----
-_spark-connect_ © 2025. Licensed under the Apache 2.0 License.

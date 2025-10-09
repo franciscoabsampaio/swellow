@@ -109,7 +109,10 @@ This project is not affiliated with, endorsed by, or sponsored by the Apache Sof
 “Apache”, “Apache Spark”, and “Spark Connect” are trademarks of the Apache Software Foundation.
 
 ---
-_spark-connect_ © 2025. Licensed under the Apache 2.0 License.
+© 2025 Francisco A. B. Sampaio. Licensed under the Apache 2.0 License.
+
+This project is not affiliated with, endorsed by, or sponsored by the Apache Software Foundation.
+“Apache”, “Apache Spark”, and “Spark Connect” are trademarks of the Apache Software Foundation.
 */
 
 mod io;
