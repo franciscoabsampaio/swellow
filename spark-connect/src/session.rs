@@ -8,7 +8,7 @@
 //! # Typical usage
 //!
 //! ```
-//! use spark_connect_rs::SparkSessionBuilder;
+//! use spark_connect::SparkSessionBuilder;
 //!
 //! # tokio_test::block_on(async {
 //! let session = SparkSessionBuilder::new("sc://localhost:15002")
@@ -46,7 +46,7 @@ use tower::ServiceBuilder;
 /// # Example
 ///
 /// ```
-/// use spark_connect_rs::SparkSessionBuilder;
+/// use spark_connect::SparkSessionBuilder;
 ///
 /// # tokio_test::block_on(async {
 /// let session = SparkSessionBuilder::new("sc://localhost:15002")
@@ -111,7 +111,7 @@ impl SparkSessionBuilder {
 /// # Examples
 ///
 /// ```
-/// use spark_connect_rs::SparkSessionBuilder;
+/// use spark_connect::SparkSessionBuilder;
 ///
 /// # tokio_test::block_on(async {
 /// let session = SparkSessionBuilder::new("sc://localhost:15002")

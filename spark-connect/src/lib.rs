@@ -49,7 +49,7 @@ Behind the scenes, the [`SparkSession::query`] method
 uses the [`ToLiteral`] trait to safely bind parameters
 before execution:
 
-```no_run
+```ignore
 use spark_connect::ToLiteral;
  
 // This is

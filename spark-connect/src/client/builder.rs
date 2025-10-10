@@ -130,7 +130,7 @@ impl ChannelBuilder {
         let os = env::consts::OS.to_lowercase();
 
         Some(format!(
-            "{} os/{} spark_connect_rs/{}",
+            "{} os/{} spark_connect/{}",
             user_agent, os, pkg_version
         ))
     }

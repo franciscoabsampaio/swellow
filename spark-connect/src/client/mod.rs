@@ -62,27 +62,6 @@ type InterceptedChannel = tonic::service::interceptor::InterceptedService<Channe
 /// - Constructed indirectly through [`SparkSessionBuilder`](crate::SparkSessionBuilder);
 /// - Maintains session context (e.g. `session_id`, `user_context`);
 /// - Automatically attaches metadata headers.
-///
-/// # Examples
-///
-/// ```
-/// use spark_connect::{SparkSessionBuilder, spark};
-///
-/// # tokio_test::block_on(async {
-/// let session = SparkSessionBuilder::new("sc://localhost:15002").build().await?;
-/// let mut client = session.client();
-///
-/// client
-///     .analyze(spark::analyze_plan_request::Analyze::SparkVersion(
-///         spark::analyze_plan_request::SparkVersion {}
-///     ))
-///     .await?;
-///
-/// println!("Spark version: {:?}", client.spark_version()?);
-/// # Ok::<(), Box<dyn std::error::Error>>(())
-/// # });
-/// ```
-/// The Spark client used internally by [`SparkSession`](crate::SparkSession).
 #[derive(Clone, Debug)]
 pub struct SparkClient {
     stub: Arc<RwLock<SparkConnectServiceClient<InterceptedChannel>>>,
