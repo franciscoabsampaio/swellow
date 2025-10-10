@@ -21,7 +21,7 @@ swellow = "swellow.cli:main"
 
 [project.optional-dependencies]
 test = [
-    "docker=>7.1.0",
+    "docker>=7.1.0",
     "pytest>=8.4.2",
 ]
 
