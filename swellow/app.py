@@ -44,9 +44,13 @@ def _run_swellow(*args, capture_output=True) -> int:
     # Check for common errors in output
     if result.returncode != 0:
         # Missing .sql file
-        msg=".sql\": No such file or directory"
-        if msg in stdout or msg in stderr:
-            raise FileNotFoundError(stdout + stderr)
+        list_of_error_msgs=[
+            ".sql\": No such file or directory",
+            "No migrations found in interval"
+        ]
+        for msg in list_of_error_msgs:
+            if msg in stdout or msg in stderr:
+                raise FileNotFoundError(stdout + stderr)
         # Return a generic error
         raise SwellowError(stdout + stderr)
     
