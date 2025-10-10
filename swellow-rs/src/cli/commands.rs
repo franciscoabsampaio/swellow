@@ -1,7 +1,7 @@
 use crate::{
     db,
     directory,
-    parser::ResourceCollection,
+    parser::{ResourceCollection, StatementCollection},
     ux
 };
 use std::fs;
@@ -51,7 +51,7 @@ async fn plan(
     current_version_id: Option<i64>,
     target_version_id: Option<i64>,
     direction: &MigrationDirection,
-) -> anyhow::Result<Vec<(i64, PathBuf, ResourceCollection)>> {
+) -> anyhow::Result<Vec<(i64, PathBuf, StatementCollection, ResourceCollection)>> {
     peck(backend).await?;
 
     tracing::info!("Comencing transaction...");
@@ -108,7 +108,7 @@ async fn plan(
         backend,
     )
     .map_err(|e| {
-        tracing::error!("Error loading migrations: {}", e);
+        tracing::error!("Error loading migrations: {e}");
         std::process::exit(1);
     })?;
 
@@ -144,8 +144,7 @@ pub async fn migrate(
         return Ok(());
     }
 
-    for (version_id, version_path, resources) in migrations {
-        let file_path = version_path.join(direction.filename());
+    for (version_id, _, statements, resources) in migrations {
         tracing::info!("{} to version {}...", direction.verb(), version_id);
 
         if direction == MigrationDirection::Up {
@@ -161,13 +160,13 @@ pub async fn migrate(
                     &resource.name_before,
                     &resource.name_after,
                     version_id,
-                    &file_path,
+                    &statements.checksum().to_string(),
                 ).await?;
             }
         }
 
         // Execute migration
-        backend.execute_sql_script(&file_path).await?;
+        backend.execute_statements(statements).await?;
         // Update records' status
         backend.update_record(&direction, version_id).await?;
     }

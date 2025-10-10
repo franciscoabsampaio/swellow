@@ -1,6 +1,6 @@
-use super::{DbEngine, file_checksum};
+use super::DbEngine;
 use arrow::{self, array::Array, array::Int64Array, array::RecordBatch};
-use spark_connect::{self as spark, ToLiteral};
+use spark_connect as spark;
 use std::path;
 
 
@@ -187,7 +187,7 @@ impl DbEngine for SparkEngine {
         object_name_before: &str,
         object_name_after: &str,
         version_id: i64,
-        file_path: &path::PathBuf
+        checksum: &str
     ) -> anyhow::Result<()> {
         self.session.query(r#"
             MERGE INTO swellow_records AS target
@@ -229,7 +229,7 @@ impl DbEngine for SparkEngine {
             .bind(object_name_before.to_string())
             .bind(object_name_after.to_string())
             .bind(version_id)
-            .bind(file_checksum(&file_path)?)
+            .bind(checksum.to_string())
             .execute()
             .await?;
 

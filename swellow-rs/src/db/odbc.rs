@@ -1,6 +1,5 @@
-use super::{DbEngine, file_checksum};
+use super::DbEngine;
 use odbc_api::{self as odbc, Cursor, Nullable, ParameterCollectionRef};
-// use sqlparser;
 use std::path;
 
 
@@ -174,7 +173,7 @@ impl DbEngine for SparkEngine {
         object_name_before: &str,
         object_name_after: &str,
         version_id: i64,
-        file_path: &path::PathBuf
+        checksum: &str
     ) -> anyhow::Result<()> {
         self._execute(&format!(r#"
             INSERT INTO swellow_records(
@@ -202,7 +201,7 @@ impl DbEngine for SparkEngine {
             object_name_before.to_string(),
             object_name_after.to_string(),
             version_id,
-            file_checksum(&file_path)?,
+            checksum.to_string(),
         ), ())?;
 
         Ok(())

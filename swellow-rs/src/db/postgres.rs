@@ -1,9 +1,9 @@
 use std::ops::DerefMut;
 
-use super::{DbEngine, file_checksum};
+use super::DbEngine;
 use sqlparser;
 use sqlx::{PgPool, Postgres, Transaction};
-use std::{path, process};
+use std::process;
 
 pub struct PostgresEngine {
     conn_str: String,
@@ -113,7 +113,7 @@ impl DbEngine for PostgresEngine {
         object_name_before: &str,
         object_name_after: &str,
         version_id: i64,
-        file_path: &path::PathBuf
+        checksum: &str
     ) -> anyhow::Result<()> {
         let tx = self.transaction().await?;
 
@@ -145,7 +145,7 @@ impl DbEngine for PostgresEngine {
             .bind(object_name_before)
             .bind(object_name_after)
             .bind(version_id)
-            .bind(file_checksum(&file_path)?)
+            .bind(checksum.to_string())
             .execute(&mut **tx)
             .await?;
 

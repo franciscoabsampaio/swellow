@@ -1,14 +1,11 @@
-use std::fmt::{Debug, Display};
-use std::ops::{Deref, DerefMut};
+use crate::parser::statement::StatementCollection;
+
 use sqlparser::ast::{
-    ObjectType,
-    Statement,
-    AlterTableOperation,
-    AlterIndexOperation,
-    AlterRoleOperation,
+    ObjectType, Statement, AlterTableOperation, AlterIndexOperation, AlterRoleOperation,
 };
-use sqlparser::dialect::PostgreSqlDialect;
-use sqlparser::parser::Parser;
+use std::fmt::Display;
+use std::ops::{Deref, DerefMut};
+use std::vec;
 
 
 #[derive(Debug, Clone)]
@@ -22,16 +19,25 @@ pub struct Resource {
 #[derive(Debug, Clone)]
 pub struct ResourceCollection(Vec<Resource>);
 
-
 impl ResourceCollection {
     pub fn new() -> Self {
-        ResourceCollection(Vec::new())
+        ResourceCollection(vec![])
+    }
+
+    pub fn from_statement_collection(collection: &StatementCollection) -> anyhow::Result<Self> {
+        let mut resources = ResourceCollection::new();
+
+        for statement in collection.parse_statements()? {
+            resources.with_statement(statement)
+        }
+
+        Ok(resources)
     }
 
     pub fn pop_first_match(
         &mut self,
         object_type: ObjectType,
-        name_before: &String,
+        name_before: &str,
     ) -> Option<Resource> {
         if let Some(pos) = self.iter().position(|r| {
             r.object_type == object_type && &r.name_after == name_before
@@ -41,86 +47,41 @@ impl ResourceCollection {
             None
         }
     }
-}
 
-impl Deref for ResourceCollection {
-    type Target = Vec<Resource>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for ResourceCollection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-
-/// Extract version ID from version name: "001_create_users" -> 1
-pub fn extract_version_id(version_name: &str) -> Result<i64, String> {
-    version_name
-        .split('_')
-        .next()
-        .ok_or_else(|| format!("Invalid version format: '{}'", version_name))?
-        .parse::<i64>()
-        .map_err(|_| format!("Version ID is not a number: '{}'", version_name))
-}
-
-
-/// Parse SQL string and return resources it modifies, with list of operations applied to each resource.
-pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
-    let dialect = PostgreSqlDialect {};
-    let statements = Parser::parse_sql(&dialect, &sql)
-        .map_err(|e| format!("Failed to parse SQL: {}", e))?;
-
-    let mut resources = ResourceCollection::new();
-
-    fn upsert_resource<GenericIdentifier: Display>(
-        resources: &mut ResourceCollection,
+    pub fn upsert<GenericIdentifier: Display>(
+        &mut self,
         object_type: ObjectType,
         name_before: Option<GenericIdentifier>,
         name_after: Option<GenericIdentifier>,
         statement: &'static str,
-        object_variant: Option<ObjectType>
+        object_variant: Option<ObjectType>,
     ) {
-        let object_type = match object_variant {
-            Some(variant) => variant,
-            _ => object_type
-        };
-        let name_before = match name_before {
-            Some(name) => name.to_string(),
-            _ => "-1".to_string()
-        };
-        let name_after = match name_after {
-            Some(name) => name.to_string(),
-            _ => "-1".to_string()
-        };
+        let object_type = object_variant.unwrap_or(object_type);
+        let name_before = name_before.map(|n| n.to_string()).unwrap_or_else(|| "-1".to_string());
+        let name_after = name_after.map(|n| n.to_string()).unwrap_or_else(|| "-1".to_string());
 
-        let (name_before, mut statements) = match statement {
+        let (name_before, mut statements_vec) = match statement {
             "CREATE" => ("-1".to_string(), Vec::new()),
-            _ => { match resources.pop_first_match(
-                object_type, &name_before
-            ) {
-                Some(res) => (res.name_before, res.statements),
-                None => (name_before, Vec::new())
-            }}
+            _ => self.pop_first_match(object_type, &name_before)
+                    .map(|res| (res.name_before, res.statements))
+                    .unwrap_or((name_before, Vec::new())),
         };
 
-        statements.push(statement.to_string());
-        resources.push(Resource {
-            object_type: object_type,
-            name_before: name_before,
-            name_after: name_after,
-            statements: statements,
+        statements_vec.push(statement.to_string());
+
+        self.push(Resource {
+            object_type,
+            name_before,
+            name_after,
+            statements: statements_vec,
         });
     }
 
-    for stmt in statements {
+    /// Upserts resources from a statement into the collection
+    pub fn with_statement(&mut self, stmt: Statement) {
         match stmt {
             // === CREATE Statements ===
-            Statement::CreateTable(table) => { upsert_resource(
-                &mut resources,
+            Statement::CreateTable(table) => { self.upsert(
                 ObjectType::Table,
                 None,
                 Some(table.name),
@@ -128,8 +89,7 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
                 None
             )}
             Statement::CreateIndex(index) => {
-                upsert_resource(
-                    &mut resources,
+                self.upsert(
                     ObjectType::Index,
                     None,
                     index.name,
@@ -143,8 +103,7 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
                 } else {
                     ObjectType::View
                 };
-                upsert_resource(
-                    &mut resources,
+                self.upsert(
                     ObjectType::View,
                     None,
                     Some(name),
@@ -153,16 +112,14 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
                 );
             }
             Statement::CreateSequence { name, .. }
-            | Statement::CreateType { name, .. } => { upsert_resource(
-                &mut resources,
+            | Statement::CreateType { name, .. } => { self.upsert(
                 ObjectType::Type,
                 None,
                 Some(name),
                 "CREATE",
                 None
             )}
-            Statement::CreateSchema { schema_name, .. } => { upsert_resource(
-                &mut resources,
+            Statement::CreateSchema { schema_name, .. } => { self.upsert(
                 ObjectType::Schema,
                 None,
                 Some(schema_name),
@@ -175,8 +132,7 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
                         Some(_) => ObjectType::User,
                         None => ObjectType::Role,
                     };
-                    upsert_resource(
-                        &mut resources,
+                    self.upsert(
                         ObjectType::Role,
                         None,
                         Some(name),
@@ -185,8 +141,7 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
                     );
                 }
             }
-            Statement::CreateDatabase { db_name, .. } => { upsert_resource(
-                &mut resources,
+            Statement::CreateDatabase { db_name, .. } => { self.upsert(
                 ObjectType::Database,
                 None,
                 Some(db_name),
@@ -203,8 +158,7 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
                         ),
                         _ => (&name, "ALTER")
                     };
-                    upsert_resource(
-                        &mut resources,
+                    self.upsert(
                         ObjectType::Table,
                         Some(&name),
                         Some(new_name),
@@ -217,11 +171,9 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
                 let (new_name, operation) = match &operation {
                     AlterIndexOperation::RenameIndex { index_name } => (
                         index_name, "RENAME"
-                    ),
-                    _ => (&name, "ALTER")
+                    )
                 };
-                upsert_resource(
-                    &mut resources,
+                self.upsert(
                     ObjectType::Index,
                     Some(&name),
                     Some(new_name),
@@ -236,8 +188,7 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
                     ),
                     _ => (&name, "ALTER")
                 };
-                upsert_resource(
-                    &mut resources,
+                self.upsert(
                     ObjectType::Role,
                     Some(&name),
                     Some(new_name),
@@ -246,8 +197,7 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
                 );
             }
             Statement::AlterView { name, .. } => {
-                upsert_resource(
-                    &mut resources,
+                self.upsert(
                     ObjectType::Index,
                     Some(&name),
                     Some(&name),
@@ -258,9 +208,8 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
 
             // === DROP Statements ===
             Statement::Drop { object_type, names, .. } => {
-                 for name in names {
-                    upsert_resource(
-                        &mut resources,
+                for name in names {
+                    self.upsert(
                         object_type,
                         Some(name),
                         None,
@@ -272,7 +221,13 @@ pub fn parse_sql(sql: &String) -> Result<ResourceCollection, String> {
             _ => {}
         }
     }
+}
 
-    // The final list of resources is the values of our map.
-    Ok(resources)
+impl Deref for ResourceCollection {
+    type Target = Vec<Resource>;
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl DerefMut for ResourceCollection {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }

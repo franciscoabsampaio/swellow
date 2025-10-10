@@ -1,13 +1,11 @@
 mod spark;
 mod postgres;
-pub use spark::{SparkEngine, SparkCatalog};
 pub use postgres::PostgresEngine;
+pub use spark::{SparkEngine, SparkCatalog};
 
-use crate::commands::MigrationDirection;
+use crate::{commands::MigrationDirection, parser::StatementCollection};
 
-use sha2::{Sha256, Digest};
 use sqlparser;
-use std::{fs, io::{BufReader, Read}, path};
 
 
 pub enum EngineBackend {
@@ -60,10 +58,10 @@ impl EngineBackend {
     pub async fn upsert_record(
         &mut self,
         object_type: &sqlparser::ast::ObjectType,
-        object_name_before: &String,
-        object_name_after: &String,
+        object_name_before: &str,
+        object_name_after: &str,
         version_id: i64,
-        file_path: &path::PathBuf
+        checksum: &str
     ) -> anyhow::Result<()> {
         match self {
             EngineBackend::Postgres(engine) => engine.upsert_record(
@@ -71,39 +69,35 @@ impl EngineBackend {
                 object_name_before,
                 object_name_after,
                 version_id,
-                file_path,
+                checksum,
             ).await,
             EngineBackend::SparkDelta(engine) => engine.upsert_record(
                 object_type,
                 object_name_before,
                 object_name_after,
                 version_id,
-                file_path,
+                checksum,
             ).await,
             EngineBackend::SparkIceberg(engine) => engine.upsert_record(
                 object_type,
                 object_name_before,
                 object_name_after,
                 version_id,
-                file_path,
+                checksum,
             ).await,
         }
     }
 
-    pub async fn execute_sql_script(&mut self, file_path: &path::PathBuf) -> anyhow::Result<()> {
-        let sql = match fs::read_to_string(file_path) {
-            Ok(sql) => sql,
-            Err(e) => {
-                tracing::error!("Error processing {:?}: {}", file_path, e);
-                std::process::exit(1);
+    pub async fn execute_statements(&mut self, statements: StatementCollection) -> anyhow::Result<()> {
+        for stmt in statements.to_strings() {
+            match self {
+                EngineBackend::Postgres(engine) => engine.execute(&stmt).await?,
+                EngineBackend::SparkDelta(engine) => engine.execute(&stmt).await?,
+                EngineBackend::SparkIceberg(engine) => engine.execute(&stmt).await?,
             }
-        };
-
-        match self {
-            EngineBackend::Postgres(engine) => engine.execute(&sql).await,
-            EngineBackend::SparkDelta(engine) => engine.execute(&sql).await,
-            EngineBackend::SparkIceberg(engine) => engine.execute(&sql).await,
         }
+
+        Ok(())
     }
 
     pub async fn update_record(
@@ -159,33 +153,13 @@ pub trait DbEngine {
     async fn upsert_record(
         &mut self,
         object_type: &sqlparser::ast::ObjectType,
-        object_name_before: &String,
-        object_name_after: &String,
+        object_name_before: &str,
+        object_name_after: &str,
         version_id: i64,
-        file_path: &path::PathBuf
+        checksum: &str
     ) -> anyhow::Result<()>;
     async fn update_record(&mut self, status: &str, version_id: i64) -> anyhow::Result<()>;
     async fn rollback(&mut self) -> anyhow::Result<()>;
     async fn commit(&mut self) -> anyhow::Result<()>;
     fn snapshot(&mut self) -> anyhow::Result<Vec<u8>>;
-}
-
-
-fn file_checksum(path: &path::Path) -> Result<String, std::io::Error> {
-    let file = fs::File::open(path)?;
-    let mut reader = BufReader::new(file);
-
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 4096];
-
-    loop {
-        let n = reader.read(&mut buffer)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buffer[..n]);
-    }
-
-    // Convert result to hex string
-    Ok(format!("{:x}", hasher.finalize()))
 }

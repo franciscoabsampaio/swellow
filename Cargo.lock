@@ -3128,7 +3128,6 @@ dependencies = [
  "clap",
  "odbc-api",
  "phf",
- "sha2",
  "spark-connect",
  "sqlparser",
  "sqlx",

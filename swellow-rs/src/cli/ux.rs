@@ -1,4 +1,4 @@
-use crate::parser::{Resource, ResourceCollection};
+use crate::parser::{Resource, ResourceCollection, StatementCollection};
 use crate::commands::MigrationDirection;
 use std::path::PathBuf;
 use std::fmt::Write;
@@ -23,13 +23,13 @@ pub fn setup_logging(verbose: u8, quiet: bool) {
 
 
 pub fn show_migration_changes(
-    migrations: &Vec<(i64, PathBuf, ResourceCollection)>,
+    migrations: &Vec<(i64, PathBuf, StatementCollection, ResourceCollection)>,
     direction: &MigrationDirection
 ) -> () {
     let operation = direction.noun();
     let mut output = "Generating migration plan...\n--- Migration plan ---".to_string();
 
-    for (version_id, version_path, resources) in migrations {
+    for (version_id, version_path, _, resources) in migrations {
         // writeln! appends to the String
         writeln!(
             &mut output,

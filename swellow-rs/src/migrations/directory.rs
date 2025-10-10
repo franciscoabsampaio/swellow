@@ -1,116 +1,107 @@
-use crate::{commands::MigrationDirection, parser::{self, ResourceCollection}};
+use crate::{
+    commands::MigrationDirection,
+    db::EngineBackend,
+    parser::{self, ResourceCollection, StatementCollection},
+};
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-
 /// Collect (version_name, version_id) for all subdirs
-pub fn collect_versions_from_directory(directory: &str) -> Result<Vec<(String, i64)>, String> {
-    // Validate directory
+pub fn collect_versions_from_directory(directory: &str) -> Result<Vec<(String, i64)>> {
     let path = Path::new(directory);
     if !path.is_dir() {
-        return Err(format!(
-            "Target directory '{}' does not exist or is not a directory",
-            directory
-        ));
+        anyhow::bail!("Target directory '{}' does not exist or is not a directory", directory);
     }
 
-    // For each subdirectory, collect (version_name, version_id)
-    let mut versions = Vec::new();
-    for entry in fs::read_dir(path)
-        .map_err(|e| format!("Failed to read directory '{}': {}", directory, e))?
-    {
-        let dir_path = entry.map_err(|e| format!("Failed to read entry: {}", e))?.path();
-        if !dir_path.is_dir() {
-            continue;
-        }
-        let version_name = match dir_path.file_name().and_then(|n| n.to_str()) {
-            Some(s) => s.to_string(),
-            None => continue,
-        };
-        let version_id = parser::extract_version_id(&version_name)
-            .map_err(|e| format!("In '{}': {}", version_name, e))?;
-        versions.push((version_name, version_id));
-    }
+    let mut versions = fs::read_dir(path)
+        .with_context(|| format!("Failed to read directory '{}'", directory))?
+        .filter_map(|entry| {
+            let dir_path = entry.ok()?.path();
+            if !dir_path.is_dir() { return None; }
 
-    // Enforce global uniqueness across ALL subdirs (not just filtered)
-    let mut first_by_id: HashMap<i64, String> = HashMap::new();
+            let version_name = dir_path.file_name()?.to_str()?.to_string();
+            let version_id = super::extract_version_id(&version_name).ok()?;
+            Some((version_name, version_id))
+        })
+        .collect::<Vec<_>>();
+
+    // Enforce global uniqueness
+    let mut first_by_id = HashMap::new();
     for (name, id) in &versions {
         if let Some(first) = first_by_id.insert(*id, name.clone()) {
-            return Err(format!(
+            anyhow::bail!(
                 "Duplicate version_id {} found in directories '{}' and '{}'",
                 id, first, name
-            ));
+            );
         }
     }
-    
+
     // Sort by version_id
     versions.sort_by_key(|(_, id)| *id);
-
     Ok(versions)
 }
-
 
 /// Scan a migration version directory for a specific SQL file and return resources
 fn gather_resources_from_migration_dir_with_id(
     version_path: PathBuf,
     version_id: i64,
-    file_name: &str, // e.g. "up.sql" or "down.sql"
-) -> Result<(i64, PathBuf, ResourceCollection), String> {
+    file_name: &str,
+    backend: &EngineBackend,
+) -> Result<(i64, PathBuf, StatementCollection, ResourceCollection)> {
     let target_file = version_path.join(file_name);
 
     if !target_file.exists() {
-        return Ok((version_id, version_path, ResourceCollection::new()))
+        return Ok((version_id, version_path, StatementCollection::from_backend(backend), ResourceCollection::new()));
     }
 
     let sql = fs::read_to_string(&target_file)
-        .map_err(|e| format!("Failed to read file {:?}: {}", target_file, e))?;
-    let resources = parser::parse_sql(&sql)?;
+        .with_context(|| format!("Failed to read file {:?}", target_file))?;
 
-    Ok((version_id, version_path, resources))
+    let statements = StatementCollection::from_backend(backend).parse_sql(&sql);
+    let resources = ResourceCollection::from_statement_collection(&statements)?;
+
+    Ok((version_id, version_path, statements, resources))
 }
 
-
-/// Load migrations within [from_version_id, to_version_id], checking global uniqueness first,
-/// then parsing only the filtered set. Returns results sorted by version_id.
+/// Load migrations within [from_version_id, to_version_id], checking uniqueness first
 pub fn load_in_interval(
     base_dir: &str,
     from_version_id: i64,
     to_version_id: i64,
-    direction: &MigrationDirection, // e.g. "up.sql" or "down.sql"
-) -> Result<Vec<(i64, PathBuf, ResourceCollection)>, String> {
+    direction: &MigrationDirection,
+    backend: &EngineBackend,
+) -> Result<Vec<(i64, PathBuf, StatementCollection, ResourceCollection)>> {
     if from_version_id > to_version_id {
-        return Err(format!(
+        anyhow::bail!(
             "Invalid version interval: from_version_id ({}) > to_version_id ({})",
             from_version_id, to_version_id
-        ));
+        );
     }
 
-    // 1) Collect versions from directory
-    let mut versions: Vec<(String, i64)> = collect_versions_from_directory(base_dir)?;
+    let mut versions = collect_versions_from_directory(base_dir)
+        .with_context(|| format!("Failed to collect versions from directory '{}'", base_dir))?;
+
     if versions.is_empty() {
-        return Err(format!("No subdirectories found in '{}'", base_dir));
+        anyhow::bail!("No subdirectories found in '{}'", base_dir);
     }
 
-    // 2) Filter to the requested interval
     versions.retain(|(_, id)| *id > from_version_id && *id <= to_version_id);
+
     if versions.is_empty() {
-        return Err(format!(
-            "No migrations found in interval [{}..={}].",
-            from_version_id, to_version_id
-        ));
+        anyhow::bail!(
+            "No migrations found in interval [{}..={}]",
+            from_version_id,
+            to_version_id
+        );
     }
 
-    // 3) Parse only the filtered set
-    let mut migrations: Vec<(i64, PathBuf, ResourceCollection)> = Vec::new();
-    for (version_name, version_id) in versions {
-        let tuple = gather_resources_from_migration_dir_with_id(
-            Path::new(base_dir).join(version_name),
-            version_id,
-            direction.filename(),
-        )?;
-        migrations.push(tuple);
-    }
-
-    Ok(migrations)
+    versions
+        .into_iter()
+        .map(|(version_name, version_id)| {
+            let path = Path::new(base_dir).join(&version_name);
+            gather_resources_from_migration_dir_with_id(path, version_id, direction.filename(), backend)
+        })
+        .collect()
 }

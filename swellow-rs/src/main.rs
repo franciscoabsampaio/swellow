@@ -1,10 +1,11 @@
 mod cli;
 mod db;
 mod migrations;
+mod parser;
 
 use clap::Parser;
 use cli::{commands, ux};
-use migrations::{directory, parser};
+use migrations::directory;
 
 /// Entry point for the Swellow CLI tool.
 ///
