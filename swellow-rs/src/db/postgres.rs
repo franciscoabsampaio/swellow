@@ -12,8 +12,8 @@ pub struct PostgresEngine {
 
 
 impl PostgresEngine {
-    pub fn new(conn_str: String) -> Self {
-        return PostgresEngine { conn_str: conn_str, tx: None }
+    pub fn new(conn_str: &str) -> Self {
+        return PostgresEngine { conn_str: conn_str.to_string(), tx: None }
     }
 
     async fn transaction(&mut self) -> anyhow::Result<&mut Transaction<'static, Postgres>> {
@@ -110,8 +110,8 @@ impl DbEngine for PostgresEngine {
     async fn upsert_record(
         &mut self,
         object_type: &sqlparser::ast::ObjectType,
-        object_name_before: &String,
-        object_name_after: &String,
+        object_name_before: &str,
+        object_name_after: &str,
         version_id: i64,
         file_path: &path::PathBuf
     ) -> anyhow::Result<()> {

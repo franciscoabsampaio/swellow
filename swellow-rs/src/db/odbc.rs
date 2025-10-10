@@ -171,8 +171,8 @@ impl DbEngine for SparkEngine {
     async fn upsert_record(
         &mut self,
         object_type: &sqlparser::ast::ObjectType,
-        object_name_before: &String,
-        object_name_after: &String,
+        object_name_before: &str,
+        object_name_after: &str,
         version_id: i64,
         file_path: &path::PathBuf
     ) -> anyhow::Result<()> {

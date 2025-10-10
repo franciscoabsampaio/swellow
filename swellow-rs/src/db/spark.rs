@@ -1,6 +1,6 @@
 use super::{DbEngine, file_checksum};
 use arrow::{self, array::Array, array::Int64Array, array::RecordBatch};
-use spark_connect as spark;
+use spark_connect::{self as spark, ToLiteral};
 use std::path;
 
 
@@ -22,10 +22,10 @@ pub struct SparkEngine {
 
 
 impl SparkEngine {
-    pub async fn new(conn_str: String, catalog: SparkCatalog) -> anyhow::Result<Self, spark::SparkError> {
+    pub async fn new(conn_str: &str, catalog: SparkCatalog) -> anyhow::Result<Self, spark::SparkError> {
         return Ok(SparkEngine {
             catalog: catalog,
-            session: spark::SparkSessionBuilder::new(&conn_str).build().await?
+            session: spark::SparkSessionBuilder::new(conn_str).build().await?
         })
     }
 
@@ -69,7 +69,7 @@ impl DbEngine for SparkEngine {
             SparkCatalog::Iceberg => "ICEBERG",
         };
 
-        self.session.query("
+        let sql = format!(r#"
             CREATE TABLE IF NOT EXISTS swellow_records (
                 version_id BIGINT,
                 object_type STRING,
@@ -80,10 +80,10 @@ impl DbEngine for SparkEngine {
                 dtm_created_at TIMESTAMP,
                 dtm_updated_at TIMESTAMP
             )
-            USING ?")
-            .bind(using_clause)
-            .execute()
-            .await?;
+            USING {using_clause};
+        "#);
+
+        self.session.query(&sql).execute().await?;
 
         Ok(())
     }
@@ -131,14 +131,34 @@ impl DbEngine for SparkEngine {
                     'LOCK' AS object_name_before,
                     'LOCK' AS object_name_after,
                     'LOCKED' AS status,
-                    'LOCK' AS checksum
+                    'LOCK' AS checksum,
+                    current_timestamp() AS dtm_updated_at
             ) s
             ON t.version_id = s.version_id
             AND t.object_type = s.object_type
             AND t.object_name_before = s.object_name_before
             AND t.object_name_after = s.object_name_after
             WHEN NOT MATCHED THEN
-            INSERT *
+            INSERT (
+                version_id,
+                object_type,
+                object_name_before,
+                object_name_after,
+                status,
+                checksum,
+                dtm_created_at,
+                dtm_updated_at
+            )
+            VALUES (
+                s.version_id,
+                s.object_type,
+                s.object_name_before,
+                s.object_name_after,
+                s.status,
+                s.checksum,
+                current_timestamp(),
+                current_timestamp()
+            )
         "#;
         
         if self.fetch_optional_i64(query).await?.is_none() {
@@ -164,33 +184,47 @@ impl DbEngine for SparkEngine {
     async fn upsert_record(
         &mut self,
         object_type: &sqlparser::ast::ObjectType,
-        object_name_before: &String,
-        object_name_after: &String,
+        object_name_before: &str,
+        object_name_after: &str,
         version_id: i64,
         file_path: &path::PathBuf
     ) -> anyhow::Result<()> {
         self.session.query(r#"
-            INSERT INTO swellow_records(
-                object_type,
-                object_name_before,
-                object_name_after,
-                version_id,
-                status,
-                checksum
-            )
-            VALUES (
-                {},
-                {},
-                {},
-                {},
-                'READY',
-                md5({})
-            )
-            ON CONFLICT (version_id, object_type, object_name_before, object_name_after)
-            DO UPDATE SET
-                status = EXCLUDED.status,
-                checksum = EXCLUDED.checksum
-        "#)
+            MERGE INTO swellow_records AS target
+            USING (
+                SELECT
+                    ? AS object_type,
+                    ? AS object_name_before,
+                    ? AS object_name_after,
+                    ? AS version_id,
+                    'READY' AS status,
+                    md5(?) AS checksum
+            ) AS source
+            ON target.version_id = source.version_id
+                AND target.object_type = source.object_type
+                AND target.object_name_before = source.object_name_before
+                AND target.object_name_after = source.object_name_after
+            WHEN MATCHED THEN
+                UPDATE SET
+                    target.status = source.status,
+                    target.checksum = source.checksum
+            WHEN NOT MATCHED THEN
+                INSERT (
+                    object_type,
+                    object_name_before,
+                    object_name_after,
+                    version_id,
+                    status,
+                    checksum
+                )
+                VALUES (
+                    source.object_type,
+                    source.object_name_before,
+                    source.object_name_after,
+                    source.version_id,
+                    source.status,
+                    source.checksum
+                )"#)
             .bind(object_type.to_string())
             .bind(object_name_before.to_string())
             .bind(object_name_after.to_string())
@@ -206,9 +240,9 @@ impl DbEngine for SparkEngine {
         self.session.query(r#"
             UPDATE swellow_records
             SET
-                status={}
+                status=?
             WHERE
-                version_id={}
+                version_id=?
         "#)
             .bind(status)
             .bind(version_id)

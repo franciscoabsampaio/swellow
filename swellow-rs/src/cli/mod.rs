@@ -15,9 +15,9 @@ pub enum Engine {
 impl Engine {
     pub async fn into_backend(self, conn_str: String) -> anyhow::Result<db::EngineBackend> {
         match self {
-            Engine::Postgres => Ok(db::EngineBackend::Postgres(db::PostgresEngine::new(conn_str))),
-            Engine::SparkDelta => Ok(db::EngineBackend::SparkDelta(db::SparkEngine::new(conn_str, db::SparkCatalog::Delta).await?)),
-            Engine::SparkIceberg => Ok(db::EngineBackend::SparkIceberg(db::SparkEngine::new(conn_str, db::SparkCatalog::Iceberg).await?)),
+            Engine::Postgres => Ok(db::EngineBackend::Postgres(db::PostgresEngine::new(&conn_str))),
+            Engine::SparkDelta => Ok(db::EngineBackend::SparkDelta(db::SparkEngine::new(&conn_str, db::SparkCatalog::Delta).await?)),
+            Engine::SparkIceberg => Ok(db::EngineBackend::SparkIceberg(db::SparkEngine::new(&conn_str, db::SparkCatalog::Iceberg).await?)),
         }
     }
 }
