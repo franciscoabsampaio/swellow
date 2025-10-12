@@ -3,7 +3,7 @@ mod postgres;
 pub use postgres::PostgresEngine;
 pub use spark::{SparkEngine, SparkCatalog};
 
-use crate::{commands::MigrationDirection, parser::StatementCollection};
+use crate::migration::MigrationDirection;
 
 use sqlparser;
 
@@ -88,13 +88,11 @@ impl EngineBackend {
         }
     }
 
-    pub async fn execute_statements(&mut self, statements: StatementCollection) -> anyhow::Result<()> {
-        for stmt in statements.to_strings() {
-            match self {
-                EngineBackend::Postgres(engine) => engine.execute(&stmt).await?,
-                EngineBackend::SparkDelta(engine) => engine.execute(&stmt).await?,
-                EngineBackend::SparkIceberg(engine) => engine.execute(&stmt).await?,
-            }
+    pub async fn execute(&mut self, sql: &str) -> anyhow::Result<()> {
+        match self {
+            EngineBackend::Postgres(engine) => engine.execute(sql).await?,
+            EngineBackend::SparkDelta(engine) => engine.execute(sql).await?,
+            EngineBackend::SparkIceberg(engine) => engine.execute(sql).await?,
         }
 
         Ok(())

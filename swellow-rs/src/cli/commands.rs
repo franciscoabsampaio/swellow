@@ -1,39 +1,9 @@
-use crate::{
-    db,
-    directory,
-    parser::{ResourceCollection, StatementCollection},
-    ux
-};
+use crate::{db, ux};
+use crate::migration::{self, MigrationDirection, MigrationCollection};
+use crate::sqlparser::{ReferenceToStaticDialect, ResourceCollection};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-
-#[derive(PartialEq)]
-pub enum MigrationDirection {
-    Up,
-    Down,
-}
-
-impl MigrationDirection {
-    pub fn verb(&self) -> &'static str {
-        match self {
-            Self::Up => "Migrating",
-            Self::Down => "Rolling back",
-        }
-    }
-    pub fn noun(&self) -> &'static str {
-        match self {
-            Self::Up => "Migration",
-            Self::Down => "Rollback",
-        }
-    }
-    pub fn filename(&self) -> &'static str {
-        match self {
-            Self::Up => "up.sql",
-            Self::Down => "down.sql",
-        }
-    }
-}
 
 /// Ensures the database is initialized and the migration table exists.
 pub async fn peck(backend: &db::EngineBackend) -> anyhow::Result<()> {
@@ -51,7 +21,7 @@ async fn plan(
     current_version_id: Option<i64>,
     target_version_id: Option<i64>,
     direction: &MigrationDirection,
-) -> anyhow::Result<Vec<(i64, PathBuf, StatementCollection, ResourceCollection)>> {
+) -> anyhow::Result<MigrationCollection> {
     peck(backend).await?;
 
     tracing::info!("Comencing transaction...");
@@ -97,27 +67,25 @@ async fn plan(
             current_version
         ),
     };
+    if from_version > to_version {
+        tracing::error!(
+            "Invalid version interval: from_version_id ({}) > to_version_id ({})",
+            from_version, to_version
+        );
+        std::process::exit(1);
+    };
 
     tracing::info!("Loading migrations from '{migration_dir}'");
-    // Get version names in migration_directory.
-    let mut migrations = directory::load_in_interval(
+    let migrations = MigrationCollection::from_directory(
+        ReferenceToStaticDialect::from(backend),
         migration_dir,
+        direction,
         from_version,
         to_version,
-        direction,
-        backend,
-    )
-    .map_err(|e| {
-        tracing::error!("Error loading migrations: {e}");
-        std::process::exit(1);
-    })?;
-
-    // Reverse execution direction if migration direction is down.
-    if *direction == MigrationDirection::Down {
-        migrations.reverse();
-    }
+    )?;
 
     ux::show_migration_changes(&migrations, direction);
+
     Ok(migrations)
 }
 
@@ -144,13 +112,13 @@ pub async fn migrate(
         return Ok(());
     }
 
-    for (version_id, _, statements, resources) in migrations {
+    for (version_id, migration) in migrations.iter() {
         tracing::info!("{} to version {}...", direction.verb(), version_id);
 
         if direction == MigrationDirection::Up {
             // Insert a new migration record for every resource
             tracing::info!("Inserting migration records for version {version_id}");
-            for resource in resources.iter() {
+            for resource in migration.resources().iter() {
                 // Skip invalid placeholder records (double NULLs)
                 if resource.name_before == "-1" && resource.name_after == "-1" {
                     continue;
@@ -159,16 +127,20 @@ pub async fn migrate(
                     &resource.object_type,
                     &resource.name_before,
                     &resource.name_after,
-                    version_id,
-                    &statements.checksum().to_string(),
+                    *version_id,
+                    &migration.statements.checksum().to_string(),
                 ).await?;
             }
         }
 
         // Execute migration
-        backend.execute_statements(statements).await?;
+        for stmt in &migration.statements {
+            if ResourceCollection::from_statement(stmt.statement.clone()).is_ok() {
+                backend.execute(&stmt.to_string()).await?;
+            }
+        }
         // Update records' status
-        backend.update_record(&direction, version_id).await?;
+        backend.update_record(&direction, *version_id).await?;
     }
 
     if flag_dry_run {
@@ -183,7 +155,10 @@ pub async fn migrate(
 }
 
 /// Takes a snapshot of the current database schema and stores it as a new migration.
-pub fn snapshot(backend: &mut db::EngineBackend, migration_dir: &str) -> anyhow::Result<()> {
+pub fn snapshot(
+    backend: &mut db::EngineBackend,
+    migration_dir: &str
+) -> anyhow::Result<()> {
     tracing::info!("Taking database snapshot...");
 
     let output = backend.snapshot().map_err(|e| {
@@ -192,13 +167,14 @@ pub fn snapshot(backend: &mut db::EngineBackend, migration_dir: &str) -> anyhow:
     })?;
 
     // Store to SQL file with the latest possible version.
-    // 1) Get latest version.
-    let new_version = directory::collect_versions_from_directory(migration_dir)
-        .map(|versions| versions.iter().fold(i64::MIN, |acc, (_, v)| acc.max(*v)) + 1)
-        .unwrap_or_else(|e| {
-            tracing::error!("Failed to collect versions: {}", e);
-            std::process::exit(1);
-        });
+    // Get latest version.
+    let new_version = migration::collect_versions_from_directory(
+        migration_dir,
+        i64::MIN,
+        i64::MAX
+    )?
+        .iter()
+        .fold(i64::MIN, |acc, (v, _)| acc.max(*v) + 1);
 
     // Output snapshot SQL script to directory with updated version
     let new_version_directory = Path::new(migration_dir).join(format!("{}_snapshot", new_version));

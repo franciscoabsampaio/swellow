@@ -1,7 +1,6 @@
 use super::DbEngine;
 use arrow::{self, array::Array, array::Int64Array, array::RecordBatch};
 use spark_connect as spark;
-use std::path;
 
 
 /// Catalog type for ODBC engines
@@ -19,7 +18,6 @@ pub struct SparkEngine {
     session: spark::SparkSession,
     // snapshot: 
 }
-
 
 impl SparkEngine {
     pub async fn new(conn_str: &str, catalog: SparkCatalog) -> anyhow::Result<Self, spark::SparkError> {

@@ -1,11 +1,10 @@
 mod cli;
 mod db;
-mod migrations;
-mod parser;
+mod migration;
+mod sqlparser;
 
 use clap::Parser;
 use cli::{commands, ux};
-use migrations::directory;
 
 /// Entry point for the Swellow CLI tool.
 ///
@@ -37,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
                 &migration_directory,
                 args.current_version_id,
                 args.target_version_id,
-                commands::MigrationDirection::Up,
+                migration::MigrationDirection::Up,
                 args.plan,
                 args.dry_run
             ).await?;
@@ -48,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
                 &migration_directory,
                 args.current_version_id,
                 args.target_version_id,
-                commands::MigrationDirection::Down,
+                migration::MigrationDirection::Down,
                 args.plan,
                 args.dry_run
             ).await?;

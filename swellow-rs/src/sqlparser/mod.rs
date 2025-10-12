@@ -2,11 +2,11 @@ mod dialect;
 mod resource;
 mod statement;
 
+pub use dialect::ReferenceToStaticDialect;
 pub use resource::{Resource, ResourceCollection};
 pub use statement::StatementCollection;
 
 use sqlparser::ast::Statement;
-use sqlparser::dialect::Dialect;
 use sqlparser::parser::Parser;
 use sqlparser::tokenizer::Token;
 
@@ -19,9 +19,9 @@ use sqlparser::tokenizer::Token;
 /// e.g. "CREATE TABLE table_name" - in order to track the resource being changed.
 /// Everything after is irrelevant.
 pub fn greedy_parse(
-    dialect: &'static dyn Dialect,
+    dialect: ReferenceToStaticDialect,
     tokens: Vec<Token>
-) -> anyhow::Result<Statement> {
+) -> Option<Statement> {
     let mut last_ok = None;
 
     for i in 1..=tokens.len() {
@@ -40,11 +40,7 @@ pub fn greedy_parse(
             };
     }
 
-    if let Some(stmt) = last_ok {
-        Ok(stmt)
-    } else {
-        anyhow::bail!("Failed to parse any part of the SQL input: {tokens:?}")
-    }
+    last_ok
 }
 
 
@@ -56,17 +52,17 @@ pub fn greedy_parse(
 /// 5) Test that statements that are successfully parsed can be parsed into a meaningful resource collection.
 #[cfg(test)]
 mod tests {
-    use crate::parser::{dialect::*, ResourceCollection, StatementCollection};
+    use crate::sqlparser::{dialect::*, ResourceCollection, StatementCollection};
     use sqlparser::dialect::Dialect;
 
-    fn make_collection(dialect: &'static dyn Dialect, sql: &str) -> StatementCollection {
+    fn make_collection(dialect: ReferenceToStaticDialect, sql: &str) -> StatementCollection {
         StatementCollection::new(dialect)
             .parse_sql(sql)
     }
 
     #[test]
     fn test_parsed_some_part() {
-        let valid_cases: &[(&'static dyn Dialect, &str, &str)] = &[
+        let valid_cases: &[(ReferenceToStaticDialect, &str, &str)] = &[
             // All dialects
             (&DIALECT_POSTGRES, "SELECT a,, b FROM t;", ""),
             (&DIALECT_HIVE, "SELECT a,, b FROM t;", ""),
@@ -117,13 +113,11 @@ mod tests {
         
         for (dialect, sql, operation) in valid_cases {
             let collection = make_collection(*dialect, sql);
-            let result = collection.parse_statements();
-            assert!(result.is_ok(), "Failed parsing for dialect {:?}: {:?}", dialect, sql);
+            assert!(!collection.is_empty(), "Failed parsing for dialect {:?}: {:?}", dialect, sql);
 
             assert!(sql == &collection.to_string());
 
-            let resources = ResourceCollection::from_statement_collection(&collection)
-                .expect("Failed to parse into a resource collection!");
+            let resources = ResourceCollection::from_statement_collection(&collection);
 
             for resource in resources.iter() {
                 // We take the first statement, because these queries are single-statement.
@@ -134,7 +128,7 @@ mod tests {
 
     #[test]
     fn test_failed_to_parse_any_part() {
-        let invalid_cases: &[(&'static dyn Dialect, &str)] = &[
+        let invalid_cases: &[(ReferenceToStaticDialect, &str)] = &[
             // Postgres only
             (&DIALECT_POSTGRES, "INSERT INTO my_table (id, name) VALUES ();"),
             (&DIALECT_POSTGRES, "UPDATE my_table SET name =;"),
@@ -151,8 +145,7 @@ mod tests {
         
         for (dialect, sql) in invalid_cases {
             let collection = make_collection(*dialect, sql);
-            let result = collection.parse_statements();
-            assert!(result.is_err(), "Parsing should have failed for dialect {:?}: {:?}", dialect, sql);
+            assert!(collection.is_empty(), "Parsing should have failed for dialect {:?}: {:?}", dialect, sql);
 
             for s in collection.to_strings() {
                 assert!(&s == sql)
@@ -162,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_multi_statement_queries() {
-        let cases: &[(&'static dyn Dialect, &str)] = &[(
+        let cases: &[(ReferenceToStaticDialect, &str)] = &[(
             &DIALECT_POSTGRES,
             "CREATE TABLE my_table (id INT, name TEXT); INSERT INTO my_table VALUES (1, 'Alice'); SELECT * FROM my_table;",
         ), (
@@ -175,9 +168,8 @@ mod tests {
 
         for (dialect, sql) in cases {
             let collection = make_collection(*dialect, sql);
-            let result = collection.parse_statements();
             assert!(
-                result.is_ok(),
+                !collection.is_empty(),
                 "Failed to parse multi-statement query for dialect {:?}: {:?}",
                 dialect,
                 sql
@@ -199,8 +191,7 @@ mod tests {
             assert!(sql == &collection.to_string());
 
             // Ensure we can collect resources for each statement
-            let resources = ResourceCollection::from_statement_collection(&collection)
-                .expect("Failed to collect resources from multi-statement query");
+            let resources = ResourceCollection::from_statement_collection(&collection);
             assert!(
                 !resources.is_empty(),
                 "No resources parsed from multi-statement query for {:?}",
