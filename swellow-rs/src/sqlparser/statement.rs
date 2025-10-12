@@ -3,7 +3,7 @@ use crate::sqlparser::dialect::*;
 
 use sqlparser::ast::Statement;
 use sqlparser::tokenizer::{Token, Tokenizer};
-use std::fmt;
+use std::fmt::{self, Write};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 
@@ -26,7 +26,6 @@ impl ActionableStatement {
 
 impl fmt::Display for ActionableStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use fmt::Write;
         let mut statement = String::new();
         
         // Print each token
@@ -92,7 +91,7 @@ impl StatementCollection {
         for token in tokens {
             current_tokens.push(token.clone());
             if token == Token::SemiColon {
-                // Only push statements
+                // Only push actionable statements
                 if let Ok(stmt) = ActionableStatement::new(self.dialect, current_tokens) {
                     self.inner.push(stmt);
                 }
@@ -160,9 +159,13 @@ impl DerefMut for StatementCollection {
 
 impl fmt::Display for StatementCollection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut output = String::new();
+
         for statement in self {
-            write!(f, "{}", statement);
+            write!(output, "{}", statement)?;
         }
+
+        write!(f, "{}", output)?;
 
         Ok(())
     }

@@ -75,7 +75,8 @@ pub fn collect_versions_from_directory(
 
 pub struct Migration {
     pub path: PathBuf,
-    pub sql: String,
+    #[allow(dead_code)]
+    sql: String,
     pub statements: StatementCollection,
 }
 

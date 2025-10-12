@@ -30,31 +30,6 @@ impl SparkEngine {
     async fn sql(&mut self, sql: &str) -> anyhow::Result<Vec<RecordBatch>> {
         Ok(self.session.query(sql).execute().await?)
     }
-
-    /// Fetch all rows for a single i64 column
-    async fn fetch_all_i64(&mut self, sql: &str, column_name: &str) -> anyhow::Result<Vec<i64>> {        
-        let mut results = Vec::new();
-
-        let batches = self.sql(sql).await?;
-        for batch in batches {
-            let column_index = batch.schema().index_of(column_name).expect(
-                &format!("Column not found: {column_name}")
-            );
-            let array_ref = batch.column(column_index);
-            let int64_array = array_ref
-                .as_any()
-                .downcast_ref::<arrow::array::Int64Array>()
-                .expect("Column is not Int64Array!");
-
-            for i in 0..int64_array.len() {
-                if int64_array.is_valid(i) {
-                    results.push(int64_array.value(i));
-                }
-            }
-        }
-
-        Ok(results)
-    }
 }
 
 

@@ -1,6 +1,6 @@
 use crate::{db, ux};
 use crate::migration::{self, MigrationDirection, MigrationCollection};
-use crate::sqlparser::{ReferenceToStaticDialect, ResourceCollection};
+use crate::sqlparser::ReferenceToStaticDialect;
 use std::fs;
 use std::path::Path;
 
@@ -134,10 +134,13 @@ pub async fn migrate(
         }
 
         // Execute migration
+        // There is a risk of execution of parseable statements without parseable resources.
+        // This *should* be fine, since the user is the one who specified the migration code.
+        // But, of course, it does create some drift between the UX output, the records,
+        // and the SQL that was effectively executed.
+        // Effectively, the priority is parseable statements - not resources.
         for stmt in &migration.statements {
-            if ResourceCollection::from_statement(stmt.statement.clone()).is_ok() {
-                backend.execute(&stmt.to_string()).await?;
-            }
+            backend.execute(&stmt.to_string()).await?;
         }
         // Update records' status
         backend.update_record(&direction, *version_id).await?;

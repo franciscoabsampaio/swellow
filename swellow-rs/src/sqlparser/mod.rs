@@ -53,7 +53,6 @@ pub fn greedy_parse(
 #[cfg(test)]
 mod tests {
     use crate::sqlparser::{dialect::*, ResourceCollection, StatementCollection};
-    use sqlparser::dialect::Dialect;
 
     fn make_collection(dialect: ReferenceToStaticDialect, sql: &str) -> StatementCollection {
         StatementCollection::new(dialect)
