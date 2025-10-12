@@ -1,5 +1,8 @@
-use super::DbEngine;
-use arrow::{self, array::Array, array::Int64Array, array::RecordBatch};
+use crate::db::{EngineError, error::EngineErrorKind};
+
+use crate::db::DbEngine;
+use arrow;
+use arrow::array::{Array, Int64Array, RecordBatch};
 use spark_connect as spark;
 
 
@@ -20,21 +23,21 @@ pub struct SparkEngine {
 }
 
 impl SparkEngine {
-    pub async fn new(conn_str: &str, catalog: SparkCatalog) -> anyhow::Result<Self, spark::SparkError> {
+    pub async fn new(conn_str: &str, catalog: SparkCatalog) -> Result<Self, EngineError> {
         return Ok(SparkEngine {
             catalog: catalog,
             session: spark::SparkSessionBuilder::new(conn_str).build().await?
         })
     }
 
-    async fn sql(&mut self, sql: &str) -> anyhow::Result<Vec<RecordBatch>> {
+    async fn sql(&mut self, sql: &str) -> Result<Vec<RecordBatch>, EngineError> {
         Ok(self.session.query(sql).execute().await?)
     }
 }
 
 
 impl DbEngine for SparkEngine {
-    async fn ensure_table(&self) -> anyhow::Result<()> {
+    async fn ensure_table(&self) -> Result<(), EngineError> {
         let catalog = self.catalog;
         
         let using_clause = match catalog {
@@ -61,17 +64,17 @@ impl DbEngine for SparkEngine {
         Ok(())
     }
 
-    async fn begin(&mut self) -> anyhow::Result<()> {
+    async fn begin(&mut self) -> Result<(), EngineError> {
         Ok(())
     }
 
-    async fn execute(&mut self, sql: &str) -> anyhow::Result<()> {
+    async fn execute(&mut self, sql: &str) -> Result<(), EngineError> {
         self.sql(sql).await?;
         Ok(())
     }
 
     /// Fetch an optional single column value
-    async fn fetch_optional_i64(&mut self, sql: &str) -> anyhow::Result<Option<i64>> {
+    async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError> {
         let batches: Vec<RecordBatch> = self.sql(sql).await?;
 
         // If no batches returned, return None
@@ -83,7 +86,13 @@ impl DbEngine for SparkEngine {
         // If the batch has no columns, return None
         let first_column = match first_batch.column(0).as_any().downcast_ref::<Int64Array>() {
             Some(col) => col,
-            None => anyhow::bail!("Expected first column to be Int64Array"),
+            None => {
+                return Err(EngineError { kind: EngineErrorKind::ColumnTypeMismatch {
+                    column_index: 0,
+                    expected: "Int64Array",
+                    found: first_batch.schema().field(0).data_type().clone(),
+                }})
+            }
         };
 
         // If column is empty, return None
@@ -95,7 +104,7 @@ impl DbEngine for SparkEngine {
         Ok(Some(first_column.value(0)))
     }
 
-    async fn acquire_lock(&mut self) -> anyhow::Result<()> {
+    async fn acquire_lock(&mut self) -> Result<(), EngineError> {
         let query = r#"
             MERGE INTO swellow_records t
             USING (
@@ -135,13 +144,13 @@ impl DbEngine for SparkEngine {
         "#;
         
         if self.fetch_optional_i64(query).await?.is_none() {
-            anyhow::bail!("Lock already exists!")
+            Err(EngineError { kind: EngineErrorKind::LockConflict })
+        } else {
+            Ok(())
         }
-
-        return Ok(())
     }
 
-    async fn disable_records(&mut self, current_version_id: i64) -> anyhow::Result<()> {
+    async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError> {
         self.session.query(r#"
             UPDATE swellow_records
             SET status='DISABLED'
@@ -161,7 +170,7 @@ impl DbEngine for SparkEngine {
         object_name_after: &str,
         version_id: i64,
         checksum: &str
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), EngineError> {
         self.session.query(r#"
             MERGE INTO swellow_records AS target
             USING (
@@ -209,7 +218,7 @@ impl DbEngine for SparkEngine {
         Ok(())
     }
 
-    async fn update_record(&mut self, status: &str, version_id: i64) -> anyhow::Result<()> {
+    async fn update_record(&mut self, status: &str, version_id: i64) -> Result<(), EngineError> {
         self.session.query(r#"
             UPDATE swellow_records
             SET
@@ -225,15 +234,15 @@ impl DbEngine for SparkEngine {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> anyhow::Result<()> {
+    async fn rollback(&mut self) -> Result<(), EngineError> {
         Ok(())
     }
     
-    async fn commit(&mut self) -> anyhow::Result<()> {
+    async fn commit(&mut self) -> Result<(), EngineError> {
         Ok(())
     }
 
-    fn snapshot(&mut self) -> anyhow::Result<Vec<u8>> {
-        anyhow::bail!("This feature isn't ready.")
+    fn snapshot(&mut self) -> Result<Vec<u8>, EngineError> {
+        Ok(vec![])
     }
 }

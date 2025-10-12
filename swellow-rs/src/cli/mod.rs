@@ -1,6 +1,8 @@
 pub mod commands;
-use crate::db;
+pub mod error;
 pub mod ux;
+
+use crate::db;
 pub use clap::{Parser, Subcommand, ValueEnum};
 
 
@@ -13,7 +15,7 @@ pub enum Engine {
 }
 
 impl Engine {
-    pub async fn into_backend(self, conn_str: String) -> anyhow::Result<db::EngineBackend> {
+    pub async fn into_backend(self, conn_str: String) -> Result<db::EngineBackend, db::EngineError> {
         match self {
             Engine::Postgres => Ok(db::EngineBackend::Postgres(db::PostgresEngine::new(&conn_str))),
             Engine::SparkDelta => Ok(db::EngineBackend::SparkDelta(db::SparkEngine::new(&conn_str, db::SparkCatalog::Delta).await?)),

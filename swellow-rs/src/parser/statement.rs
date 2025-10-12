@@ -1,5 +1,7 @@
-use crate::sqlparser::greedy_parse;
-use crate::sqlparser::dialect::*;
+use crate::parser::error::ParseErrorKind;
+use crate::parser::greedy_parse;
+use crate::parser::dialect::*;
+use crate::parser::ParseError;
 
 use sqlparser::ast::Statement;
 use sqlparser::tokenizer::{Token, Tokenizer};
@@ -15,11 +17,11 @@ pub struct ActionableStatement {
 }
 
 impl ActionableStatement {
-    pub fn new(dialect: ReferenceToStaticDialect, tokens: Vec<Token>) -> anyhow::Result<Self> {
+    pub fn new(dialect: ReferenceToStaticDialect, tokens: Vec<Token>) -> Result<Self, ParseError> {
         if let Some(statement) = greedy_parse(dialect, tokens.clone()) {
             Ok(ActionableStatement { tokens, statement })
         } else {
-            anyhow::bail!("Failed to parse tokens into statement: {tokens:?}")
+            Err(ParseError { kind: ParseErrorKind::Tokens(tokens) })
         }
     }
 }

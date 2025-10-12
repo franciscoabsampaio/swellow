@@ -1,8 +1,9 @@
-use std::ops::DerefMut;
+use crate::db::{EngineError, error::EngineErrorKind};
 
 use super::DbEngine;
 use sqlparser;
 use sqlx::{PgPool, Postgres, Transaction};
+use std::ops::DerefMut;
 use std::process;
 
 pub struct PostgresEngine {
@@ -16,9 +17,12 @@ impl PostgresEngine {
         return PostgresEngine { conn_str: conn_str.to_string(), tx: None }
     }
 
-    async fn transaction(&mut self) -> anyhow::Result<&mut Transaction<'static, Postgres>> {
+    async fn transaction(&mut self) -> Result<&mut Transaction<'static, Postgres>, EngineError> {
         if self.tx.is_none() {
-            let txn = PgPool::connect(&self.conn_str).await?.begin().await?;
+            let txn = PgPool::connect(&self.conn_str)
+                .await?
+                .begin()
+                .await?;
             self.tx = Some(txn);
         }
         
@@ -29,7 +33,7 @@ impl PostgresEngine {
 
 // #[async_trait::async_trait]
 impl DbEngine for PostgresEngine {
-    async fn ensure_table(&self) -> anyhow::Result<()> {
+    async fn ensure_table(&self) -> Result<(), EngineError> {
         let pool = PgPool::connect(&self.conn_str).await?;
         
         sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
@@ -56,13 +60,13 @@ impl DbEngine for PostgresEngine {
         Ok(())
     }
 
-    async fn begin(&mut self) -> anyhow::Result<()> {
+    async fn begin(&mut self) -> Result<(), EngineError> {
         self.transaction().await?;
 
         Ok(())
     }
 
-    async fn execute(&mut self, sql: &str) -> anyhow::Result<()> {
+    async fn execute(&mut self, sql: &str) -> Result<(), EngineError> {
         let tx = self.transaction().await?;
 
         sqlx::raw_sql(&sql)
@@ -73,7 +77,7 @@ impl DbEngine for PostgresEngine {
     }
 
     /// Fetch an optional single column value
-    async fn fetch_optional_i64(&mut self, sql: &str) -> anyhow::Result<Option<i64>> {
+    async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError> {
         let tx = self.transaction().await?;
         
         Ok(sqlx::query_scalar(sql)
@@ -81,7 +85,7 @@ impl DbEngine for PostgresEngine {
             .await?)
     }
 
-    async fn acquire_lock(&mut self) -> anyhow::Result<()> {
+    async fn acquire_lock(&mut self) -> Result<(), EngineError> {
         let tx = self.transaction().await?;
 
         sqlx::query("LOCK TABLE swellow_records IN ACCESS EXCLUSIVE MODE;")
@@ -91,7 +95,7 @@ impl DbEngine for PostgresEngine {
         return Ok(())
     }
 
-    async fn disable_records(&mut self, current_version_id: i64) -> anyhow::Result<()> {
+    async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError> {
         let tx = self.transaction().await?;
 
         sqlx::query(
@@ -114,7 +118,7 @@ impl DbEngine for PostgresEngine {
         object_name_after: &str,
         version_id: i64,
         checksum: &str
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), EngineError> {
         let tx = self.transaction().await?;
 
         sqlx::query(
@@ -151,7 +155,7 @@ impl DbEngine for PostgresEngine {
 
         Ok(())
     }
-    async fn update_record(&mut self, status: &str, version_id: i64) -> anyhow::Result<()> {
+    async fn update_record(&mut self, status: &str, version_id: i64) -> Result<(), EngineError> {
         let tx = self.transaction().await?;
 
         sqlx::query(
@@ -171,21 +175,21 @@ impl DbEngine for PostgresEngine {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> anyhow::Result<()> {
+    async fn rollback(&mut self) -> Result<(), EngineError> {
         if let Some(tx) = self.tx.take() {
             tx.rollback().await?;
         }
         Ok(())
     }
     
-    async fn commit(&mut self) -> anyhow::Result<()> {
+    async fn commit(&mut self) -> Result<(), EngineError> {
         if let Some(tx) = self.tx.take() {
             tx.commit().await?;
         }
         Ok(())
     }
 
-    fn snapshot(&mut self) -> anyhow::Result<Vec<u8>> {
+    fn snapshot(&mut self) -> Result<Vec<u8>, EngineError> {
         // Check if pg_dump is installed
         if process::Command::new("pg_dump").arg("--version").output()
             .is_err() {
@@ -197,12 +201,15 @@ impl DbEngine for PostgresEngine {
             .arg("--no-owner")    // drop ownership info
             .arg("--no-privileges")
             .arg(&self.conn_str)
-            .output()?;
+            .output()
+            .map_err(|source| {
+                EngineError { kind: EngineErrorKind::Process { source, cmd: "pg_dump --schema-only --no-owner --no-privileges".to_string() }}
+            })?;
         
         if output.status.success() {
-            return Ok(output.stdout)
+            Ok(output.stdout)
         } else {
-            anyhow::bail!("pgdump error: {}", String::from_utf8_lossy(&output.stderr))
+            Err(EngineError { kind: EngineErrorKind::PGDump(output.stderr)})
         }
     }
 }

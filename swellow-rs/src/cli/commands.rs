@@ -1,12 +1,14 @@
-use crate::{db, ux};
-use crate::migration::{self, MigrationDirection, MigrationCollection};
-use crate::sqlparser::ReferenceToStaticDialect;
+use crate::cli::error::SwellowErrorKind;
+use crate::{db, parser, ux};
+use crate::SwellowError;
+use crate::migration::{MigrationDirection, MigrationCollection};
+use crate::parser::ReferenceToStaticDialect;
 use std::fs;
 use std::path::Path;
 
 
 /// Ensures the database is initialized and the migration table exists.
-pub async fn peck(backend: &db::EngineBackend) -> anyhow::Result<()> {
+pub async fn peck(backend: &db::EngineBackend) -> Result<(), SwellowError> {
     tracing::info!("Pecking database...");
     backend.ensure_table().await?;
     tracing::info!("Pecking successful 🐦");
@@ -21,7 +23,7 @@ async fn plan(
     current_version_id: Option<i64>,
     target_version_id: Option<i64>,
     direction: &MigrationDirection,
-) -> anyhow::Result<MigrationCollection> {
+) -> Result<MigrationCollection, SwellowError> {
     peck(backend).await?;
 
     tracing::info!("Comencing transaction...");
@@ -68,10 +70,7 @@ async fn plan(
         ),
     };
     if from_version > to_version {
-        anyhow::bail!(
-            "Invalid version interval: from_version_id ({}) > to_version_id ({})",
-            from_version, to_version
-        )
+        return Err(SwellowError { kind: SwellowErrorKind::InvalidVersionInterval(from_version, to_version) })
     };
 
     tracing::info!("Loading migrations from '{migration_dir}'");
@@ -97,7 +96,7 @@ pub async fn migrate(
     direction: MigrationDirection,
     flag_plan: bool,
     flag_dry_run: bool,
-) -> anyhow::Result<()> {
+) -> Result<(), SwellowError> {
     let migrations = plan(
         backend,
         migration_dir,
@@ -160,17 +159,14 @@ pub async fn migrate(
 pub fn snapshot(
     backend: &mut db::EngineBackend,
     migration_dir: &str
-) -> anyhow::Result<()> {
+) -> Result<(), SwellowError> {
     tracing::info!("Taking database snapshot...");
 
-    let output = backend.snapshot().map_err(|e| {
-        tracing::error!("Snapshot failed: {}", e);
-        std::process::exit(1);
-    })?;
+    let output = backend.snapshot()?;
 
     // Store to SQL file with the latest possible version.
     // Get latest version.
-    let new_version = migration::collect_versions_from_directory(
+    let new_version = parser::collect_versions_from_directory(
         migration_dir,
         i64::MIN,
         i64::MAX
@@ -180,8 +176,14 @@ pub fn snapshot(
 
     // Output snapshot SQL script to directory with updated version
     let new_version_directory = Path::new(migration_dir).join(format!("{}_snapshot", new_version));
-    fs::create_dir_all(&new_version_directory)?;
-    fs::write(new_version_directory.join("up.sql"), output)?;
+    fs::create_dir_all(&new_version_directory)
+        .map_err(|source| {
+            SwellowError { kind: SwellowErrorKind::IoDirectoryCreate { source, path: new_version_directory.clone() } }
+        })?;
+    fs::write(new_version_directory.join("up.sql"), output)
+        .map_err(|source| {
+            SwellowError { kind: SwellowErrorKind::IoFileWrite { source, path: new_version_directory.join("up.sql") } }
+        })?;
 
     tracing::info!("Snapshot created at version {} 🐦", new_version);
     Ok(())

@@ -1,4 +1,6 @@
-use crate::sqlparser::statement::StatementCollection;
+use crate::parser::error::ParseErrorKind;
+use crate::parser::ParseError;
+use crate::parser::statement::StatementCollection;
 
 use sqlparser::ast::{
     ObjectType, Statement, AlterTableOperation, AlterIndexOperation, AlterRoleOperation,
@@ -42,7 +44,7 @@ impl ResourceCollection {
     }
 
     /// Parses a collection from a statement
-    pub fn from_statement(stmt: Statement) -> anyhow::Result<Self> {
+    pub fn from_statement(stmt: Statement) -> Result<Self, ParseError> {
         Ok(ResourceCollection(match stmt {
             // === CREATE Statements ===
             Statement::CreateTable(table) => vec![Resource::new(
@@ -174,7 +176,7 @@ impl ResourceCollection {
                     })
                     .collect()
             },
-            _ => anyhow::bail!("Failed to parse any resources from the statement '{stmt}'!")
+            _ => return Err(ParseError { kind: ParseErrorKind::Statement(stmt) })
         }))
     }
 

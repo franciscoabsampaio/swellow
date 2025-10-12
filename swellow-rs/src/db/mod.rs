@@ -1,5 +1,7 @@
+mod error;
 mod spark;
 mod postgres;
+pub use error::EngineError;
 pub use postgres::PostgresEngine;
 pub use spark::{SparkEngine, SparkCatalog};
 
@@ -15,7 +17,7 @@ pub enum EngineBackend {
 }
 
 impl EngineBackend {
-    pub async fn ensure_table(&self) -> anyhow::Result<()> {
+    pub async fn ensure_table(&self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.ensure_table().await,
             EngineBackend::SparkDelta(engine) => engine.ensure_table().await,
@@ -23,7 +25,7 @@ impl EngineBackend {
         }
     }
 
-    pub async fn begin(&mut self) -> anyhow::Result<()> {
+    pub async fn begin(&mut self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.begin().await,
             EngineBackend::SparkDelta(engine) => engine.begin().await,
@@ -31,7 +33,7 @@ impl EngineBackend {
         }
     }
 
-    pub async fn fetch_optional_i64(&mut self, sql: &str) -> anyhow::Result<Option<i64>> {
+    pub async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.fetch_optional_i64(sql).await,
             EngineBackend::SparkDelta(engine) => engine.fetch_optional_i64(sql).await,
@@ -39,7 +41,7 @@ impl EngineBackend {
         }
     }
 
-    pub async fn acquire_lock(&mut self) -> anyhow::Result<()> {
+    pub async fn acquire_lock(&mut self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.acquire_lock().await,
             EngineBackend::SparkDelta(engine) => engine.acquire_lock().await,
@@ -47,7 +49,7 @@ impl EngineBackend {
         }
     }
 
-    pub async fn disable_records(&mut self, current_version_id: i64) -> anyhow::Result<()> {
+    pub async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.disable_records(current_version_id).await,
             EngineBackend::SparkDelta(engine) => engine.disable_records(current_version_id).await,
@@ -62,7 +64,7 @@ impl EngineBackend {
         object_name_after: &str,
         version_id: i64,
         checksum: &str
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.upsert_record(
                 object_type,
@@ -88,7 +90,7 @@ impl EngineBackend {
         }
     }
 
-    pub async fn execute(&mut self, sql: &str) -> anyhow::Result<()> {
+    pub async fn execute(&mut self, sql: &str) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.execute(sql).await?,
             EngineBackend::SparkDelta(engine) => engine.execute(sql).await?,
@@ -102,7 +104,7 @@ impl EngineBackend {
         &mut self, 
         direction: &MigrationDirection,
         version_id: i64
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), EngineError> {
         let status = match direction {
             MigrationDirection::Up => "APPLIED",
             MigrationDirection::Down => "ROLLED_BACK"
@@ -115,7 +117,7 @@ impl EngineBackend {
         }
     }
 
-    pub async fn rollback(&mut self) -> anyhow::Result<()> {
+    pub async fn rollback(&mut self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.rollback().await,
             EngineBackend::SparkDelta(engine) => engine.rollback().await,
@@ -123,7 +125,7 @@ impl EngineBackend {
         }
     }
 
-    pub async fn commit(&mut self) -> anyhow::Result<()> {
+    pub async fn commit(&mut self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.commit().await,
             EngineBackend::SparkDelta(engine) => engine.commit().await,
@@ -131,7 +133,7 @@ impl EngineBackend {
         }
     }
 
-    pub fn snapshot(&mut self) -> anyhow::Result<Vec<u8>> {
+    pub fn snapshot(&mut self) -> Result<Vec<u8>, EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.snapshot(),
             EngineBackend::SparkDelta(engine) => engine.snapshot(),
@@ -142,12 +144,12 @@ impl EngineBackend {
 
 
 pub trait DbEngine {
-    async fn ensure_table(&self) -> anyhow::Result<()>;
-    async fn begin(&mut self) -> anyhow::Result<()>;
-    async fn execute(&mut self, sql: &str) -> anyhow::Result<()>;
-    async fn fetch_optional_i64(&mut self, sql: &str) -> anyhow::Result<Option<i64>>;
-    async fn acquire_lock(&mut self) -> anyhow::Result<()>;
-    async fn disable_records(&mut self, current_version_id: i64) -> anyhow::Result<()>;
+    async fn ensure_table(&self) -> Result<(), EngineError>;
+    async fn begin(&mut self) -> Result<(), EngineError>;
+    async fn execute(&mut self, sql: &str) -> Result<(), EngineError>;
+    async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError>;
+    async fn acquire_lock(&mut self) -> Result<(), EngineError>;
+    async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError>;
     async fn upsert_record(
         &mut self,
         object_type: &sqlparser::ast::ObjectType,
@@ -155,9 +157,9 @@ pub trait DbEngine {
         object_name_after: &str,
         version_id: i64,
         checksum: &str
-    ) -> anyhow::Result<()>;
-    async fn update_record(&mut self, status: &str, version_id: i64) -> anyhow::Result<()>;
-    async fn rollback(&mut self) -> anyhow::Result<()>;
-    async fn commit(&mut self) -> anyhow::Result<()>;
-    fn snapshot(&mut self) -> anyhow::Result<Vec<u8>>;
+    ) -> Result<(), EngineError>;
+    async fn update_record(&mut self, status: &str, version_id: i64) -> Result<(), EngineError>;
+    async fn rollback(&mut self) -> Result<(), EngineError>;
+    async fn commit(&mut self) -> Result<(), EngineError>;
+    fn snapshot(&mut self) -> Result<Vec<u8>, EngineError>;
 }

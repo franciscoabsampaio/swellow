@@ -1,8 +1,13 @@
 mod dialect;
+mod error;
+mod io;
+pub mod migration;
 mod resource;
 mod statement;
 
 pub use dialect::ReferenceToStaticDialect;
+pub use error::ParseError;
+pub use io::collect_versions_from_directory;
 pub use resource::{Resource, ResourceCollection};
 pub use statement::StatementCollection;
 
@@ -52,7 +57,7 @@ pub fn greedy_parse(
 /// 5) Test that statements that are successfully parsed can be parsed into a meaningful resource collection.
 #[cfg(test)]
 mod tests {
-    use crate::sqlparser::{dialect::*, ResourceCollection, StatementCollection};
+    use crate::parser::{dialect::*, ResourceCollection, StatementCollection};
 
     fn make_collection(dialect: ReferenceToStaticDialect, sql: &str) -> StatementCollection {
         StatementCollection::new(dialect)

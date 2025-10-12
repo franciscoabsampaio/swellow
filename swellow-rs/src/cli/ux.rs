@@ -1,5 +1,5 @@
 use crate::migration::{MigrationCollection, MigrationDirection};
-use crate::sqlparser::Resource;
+use crate::parser::Resource;
 use std::fmt::Write;
 
 

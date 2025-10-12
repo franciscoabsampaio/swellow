@@ -1,7 +1,9 @@
 mod cli;
 mod db;
-mod migration;
-mod sqlparser;
+mod parser;
+
+pub use cli::error::SwellowError;
+pub use parser::migration;
 
 use clap::Parser;
 use cli::{commands, ux};
@@ -17,7 +19,7 @@ use cli::{commands, ux};
 /// Arguments such as `--db` and `--dir` are parsed from the command line
 /// and passed through to the relevant command handlers.
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), SwellowError> {
     let args: cli::Cli = cli::Cli::parse();
 
     let db_connection_string: String = args.db_connection_string;
