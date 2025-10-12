@@ -68,11 +68,10 @@ async fn plan(
         ),
     };
     if from_version > to_version {
-        tracing::error!(
+        anyhow::bail!(
             "Invalid version interval: from_version_id ({}) > to_version_id ({})",
             from_version, to_version
-        );
-        std::process::exit(1);
+        )
     };
 
     tracing::info!("Loading migrations from '{migration_dir}'");

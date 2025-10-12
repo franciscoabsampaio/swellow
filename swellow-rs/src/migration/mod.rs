@@ -38,25 +38,46 @@ pub fn collect_versions_from_directory(
     // For each subdirectory, collect (version_name, version_id)
     let versions = fs::read_dir(path)
         .map_err(|e| anyhow::format_err!("Failed to read from '{path:?}': {e}"))?
-        .map(|entry| {
-            let dir_path = entry?.path();
+        .filter_map(|entry| {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(e) => {
+                    // Fatal: reading the directory failed.
+                    return Some(Err(anyhow::anyhow!("Failed to read entry in {:?}: {}", path, e)));
+                }
+            };
+
+            let dir_path = entry.path();
             if !dir_path.is_dir() {
-                anyhow::bail!("Not a directory: {:?}", dir_path);
+                tracing::debug!("Skipping non-directory: {:?}", dir_path);
+                return None;
             }
 
-            let dir_name = dir_path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| anyhow::anyhow!("Invalid dir name"))?
-                .to_string();
+            let dir_name = match dir_path.file_name().and_then(|s| s.to_str()) {
+                Some(s) => s.to_string(),
+                None => {
+                    // Fatal: invalid directory name.
+                    return Some(Err(anyhow::anyhow!("Invalid directory name in {:?}", dir_path)));
+                }
+            };
 
-            let version_id = parse_id_from_version_name(&dir_name)?;
+            let version_id = match parse_id_from_version_name(&dir_name) {
+                Ok(id) => id,
+                Err(e) => {
+                    tracing::debug!("Skipping {:?}: failed to parse version ID: {}", dir_name, e);
+                    return None;
+                }
+            };
 
             if version_id <= from_version_id || version_id > to_version_id {
-                anyhow::bail!("Out of range");
+                tracing::debug!(
+                    "Skipping version {} (out of range {}..{})",
+                    version_id, from_version_id, to_version_id
+                );
+                return None;
             }
 
-            Ok((version_id, path.join(&dir_name)))
+            Some(Ok((version_id, path.join(&dir_name))))
         })
         .collect::<anyhow::Result<BTreeMap<i64, PathBuf>>>()?;
 
