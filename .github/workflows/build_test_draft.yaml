@@ -198,7 +198,7 @@ jobs:
           body: |
             Included in this release:
             
-            - Binaries for multiple platforms (`${{ env.PROJECT_NAME }}_<platform>`).
+            - Binaries for multiple platforms (`release-binary-<platform>`).
             - Source code archives.
             - Provenance.
           draft: true
