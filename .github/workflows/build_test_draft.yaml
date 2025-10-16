@@ -36,28 +36,6 @@ jobs:
           git tag -f v${{ steps.get_version.outputs.version }}
           git push -f origin v${{ steps.get_version.outputs.version }}
 
-  test-spark-connect:
-    runs-on: ubuntu-latest
-    services:
-      docker:
-        image: docker:20.10.24-dind
-        options: --privileged
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Spark Connect Server container instance
-        run: docker run -p 15002:15002 ${{ github.repository_owner }}/spark-connect
-      
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Test crate spark-connect
-        run: |
-          cargo test -p spark-connect
-          cargo test -p spark-connect --doc
-
   build-binaries:
     needs: [tag-version]
     strategy:
@@ -220,7 +198,7 @@ jobs:
           body: |
             Included in this release:
             
-            - Binaries for multiple platforms (`swellow_<platform>`).
+            - Binaries for multiple platforms (`${{ env.PROJECT_NAME }}_<platform>`).
             - Source code archives.
             - Provenance.
           draft: true
