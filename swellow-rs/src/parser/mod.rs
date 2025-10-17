@@ -6,7 +6,7 @@ mod resource;
 mod statement;
 
 pub use dialect::ReferenceToStaticDialect;
-pub use error::ParseError;
+pub use error::{ParseError, ParseErrorKind};
 pub use io::collect_versions_from_directory;
 pub use resource::{Resource, ResourceCollection};
 pub use statement::StatementCollection;

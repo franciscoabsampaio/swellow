@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod error;
+pub mod output;
 pub mod ux;
 
 use crate::db;
@@ -123,4 +124,16 @@ pub enum Commands {
 Automatically creates a new version migration subdirectory like '<VERSION>_snapshot'.
 ⚠️  pg_dump must be installed with a version matching the server's.")]
     Snapshot {}
+}
+
+impl std::fmt::Display for Commands {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Commands::Peck { .. } => "peck",
+            Commands::Up { .. } => "up",
+            Commands::Down { .. } => "down",
+            Commands::Snapshot { .. } => "snapshot",
+        };
+        write!(f, "{name}")
+    }
 }

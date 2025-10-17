@@ -1,5 +1,6 @@
 use crate::{db::EngineError, parser::ParseError};
 
+use serde::Serialize;
 use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
@@ -65,5 +66,81 @@ impl From<EngineError> for SwellowError {
 impl From<ParseError> for SwellowError {
     fn from(error: ParseError) -> Self {
         SwellowError { kind: SwellowErrorKind::Parse(error) }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{db::{EngineError, EngineErrorKind}, parser::{ParseError, ParseErrorKind}};
+    use std::{io, error::Error};
+    
+    #[test]
+    fn swellow_error_display_formats_correctly() {
+        let engine_err = EngineError {
+            kind: EngineErrorKind::LockConflict,
+        };
+        let parse_err = ParseError {
+            kind: ParseErrorKind::InvalidVersionNumber("abc".into()),
+        };
+        let path = std::path::PathBuf::from("/tmp/file.sql");
+
+        let cases: Vec<(SwellowErrorKind, &str)> = vec![
+            (SwellowErrorKind::Engine(engine_err), "Lock acquisition failed"),
+            (SwellowErrorKind::InvalidVersionInterval(10, 5), "Invalid version interval"),
+            (
+                SwellowErrorKind::IoDirectoryCreate {
+                    source: io::Error::new(io::ErrorKind::Other, "disk full"),
+                    path: path.clone(),
+                },
+                "Failed to create directory",
+            ),
+            (
+                SwellowErrorKind::IoFileWrite {
+                    source: io::Error::new(io::ErrorKind::Other, "disk full"),
+                    path: path.clone(),
+                },
+                "Failed to write to file",
+            ),
+            (SwellowErrorKind::Parse(parse_err), "Invalid version number"),
+        ];
+
+        for (kind, expect) in cases {
+            let text = kind.to_string();
+            assert!(
+                text.contains(expect),
+                "Expected `{}` in `{}`",
+                expect,
+                text
+            );
+        }
+    }
+
+    #[test]
+    fn swellow_error_source_chain_works() {
+        let io_err = io::Error::new(io::ErrorKind::Other, "permission denied");
+        let kind = SwellowErrorKind::IoFileWrite {
+            source: io_err,
+            path: std::path::PathBuf::from("/tmp/out.sql"),
+        };
+        let src = kind.source().unwrap().to_string();
+        assert!(src.contains("permission denied"));
+    }
+
+    #[test]
+    fn swellow_error_from_conversions_work() {
+        let engine_err = EngineError {
+            kind: EngineErrorKind::LockConflict,
+        };
+        let parse_err = ParseError {
+            kind: ParseErrorKind::InvalidVersionFormat("bad".into()),
+        };
+
+        let s1: SwellowError = engine_err.into();
+        let s2: SwellowError = parse_err.into();
+
+        assert!(matches!(s1.kind, SwellowErrorKind::Engine(_)));
+        assert!(matches!(s2.kind, SwellowErrorKind::Parse(_)));
     }
 }

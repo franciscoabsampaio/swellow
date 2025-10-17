@@ -1,7 +1,7 @@
 mod error;
 mod spark;
 mod postgres;
-pub use error::EngineError;
+pub use error::{EngineError, EngineErrorKind};
 pub use postgres::PostgresEngine;
 pub use spark::{SparkEngine, SparkCatalog};
 

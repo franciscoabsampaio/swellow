@@ -1,9 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use arrow::array::Array;
 use arrow::datatypes::DataType;
-use arrow::record_batch::RecordBatch;
 
 
 #[derive(Debug)]
@@ -73,5 +71,64 @@ impl From<sqlx::Error> for EngineError {
 impl From<spark_connect::SparkError> for EngineError {
     fn from(error: spark_connect::SparkError) -> Self {
         EngineError { kind: EngineErrorKind::Spark(error) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{io, error::Error};
+    use arrow::datatypes::DataType;
+    use sqlx;
+    use spark_connect;
+
+    #[test]
+    fn engine_error_display_formats_correctly() {
+        let cases: Vec<(EngineErrorKind, &str)> = vec![
+            (
+                EngineErrorKind::ColumnTypeMismatch {
+                    column_index: 1,
+                    expected: "Int64",
+                    found: DataType::Utf8,
+                },
+                "Column 1 has mismatched type",
+            ),
+            (EngineErrorKind::LockConflict, "Lock acquisition failed"),
+            (EngineErrorKind::PGDump(vec![1, 2, 3]), "pg_dump failed"),
+            (
+                EngineErrorKind::SQLX(sqlx::Error::RowNotFound),
+                "sqlx::Error",
+            ),
+        ];
+
+        for (kind, expect) in cases {
+            let text = kind.to_string();
+            assert!(
+                text.contains(expect),
+                "Expected `{}` in `{}`",
+                expect,
+                text
+            );
+        }
+    }
+
+    #[test]
+    fn engine_error_source_is_accessible() {
+        let io_err = io::Error::new(io::ErrorKind::Other, "io fail");
+        let kind = EngineErrorKind::Process {
+            source: io_err,
+            cmd: "echo".into(),
+        };
+        let src = kind.source().unwrap().to_string();
+        assert!(src.contains("io fail"));
+    }
+
+    #[test]
+    fn engine_error_from_sqlx() {
+        let sqlx_err = sqlx::Error::RowNotFound;
+
+        let e1: EngineError = sqlx_err.into();
+
+        assert!(matches!(e1.kind, EngineErrorKind::SQLX(_)));
     }
 }
