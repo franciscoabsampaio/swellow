@@ -80,7 +80,6 @@ mod tests {
     use std::{io, error::Error};
     use arrow::datatypes::DataType;
     use sqlx;
-    use spark_connect;
 
     #[test]
     fn engine_error_display_formats_correctly() {

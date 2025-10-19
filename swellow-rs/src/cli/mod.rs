@@ -70,6 +70,13 @@ pub struct Cli {
     )]
     pub quiet: bool,
 
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        help = "Enable JSON output format. Human readable output is disabled when this flag is set."
+    )]
+    pub json: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -120,9 +127,9 @@ pub enum Commands {
         args: SwellowArgs,
     },
 
-    #[command(about = "Use pg_dump to take a snapshot of the database schema into a set of CREATE statements.
+    #[command(about = "Take a snapshot of the database schema into a set of CREATE statements.
 Automatically creates a new version migration subdirectory like '<VERSION>_snapshot'.
-⚠️  pg_dump must be installed with a version matching the server's.")]
+⚠️ Postgres: pg_dump must be installed with a version matching the server's.")]
     Snapshot {}
 }
 

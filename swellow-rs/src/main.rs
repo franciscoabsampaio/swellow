@@ -7,46 +7,100 @@ pub use parser::migration;
 
 use clap::Parser;
 use cli::{commands, error, output, ux};
+use output::{SwellowOutput, SwellowStatus};
 
 
-async fn run_command(args: cli::Cli) -> output::SwellowOutput<serde_json::Value> {
-    let db_connection_string: String = args.db_connection_string;
-    let migration_directory: String = args.migration_directory;
-    let mut backend = match args.engine.into_backend(db_connection_string).await {
-        Ok(b) => b,
-        Err(e) => return 
-    };
+async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value> {
+    let db_connection_string: String = args.db_connection_string.clone();
+    let migration_directory: String = args.migration_directory.clone();
 
     let command_name = args.command.to_string();
 
-    match args.command {
-        cli::Commands::Peck { } => {
-            commands::peck(&backend).await?;
+    let mut backend = match args.engine.into_backend(db_connection_string).await {
+        Ok(b) => b,
+        Err(e) => return SwellowOutput {
+            command: command_name,
+            status: SwellowStatus::Success,
+            data: None,
+            error: Some((&e).into()),
         }
-        cli::Commands::Up { args } => {
-            commands::migrate(
-                &mut backend,
-                &migration_directory,
-                args.current_version_id,
-                args.target_version_id,
-                migration::MigrationDirection::Up,
-                args.plan,
-                args.dry_run
-            ).await?;
+    };
+
+    match &args.command {
+        cli::Commands::Peck { } => match commands::peck(&backend).await {
+            Ok(_) => SwellowOutput {
+                command: command_name,
+                status: SwellowStatus::Success,
+                data: None,
+                error: None,
+            },
+            Err(e) => SwellowOutput {
+                command: command_name,
+                status: SwellowStatus::Error,
+                data: None,
+                error: Some((&e).into()),
+            },
         }
-        cli::Commands::Down { args } => {
-            commands::migrate(
-                &mut backend,
-                &migration_directory,
-                args.current_version_id,
-                args.target_version_id,
-                migration::MigrationDirection::Down,
-                args.plan,
-                args.dry_run
-            ).await?;
+        cli::Commands::Up { args } => match commands::migrate(
+            &mut backend,
+            &migration_directory,
+            args.current_version_id,
+            args.target_version_id,
+            migration::MigrationDirection::Up,
+            args.plan,
+            args.dry_run
+        ).await {
+            Ok(_) => SwellowOutput {
+                command: command_name,
+                status: SwellowStatus::Success,
+                data: None,
+                error: None,
+            },
+            Err(e) => SwellowOutput {
+                command: command_name,
+                status: SwellowStatus::Error,
+                data: None,
+                error: Some((&e).into()),
+            },
         }
-        cli::Commands::Snapshot { } => {
-            commands::snapshot(&mut backend, &migration_directory)?;
+        cli::Commands::Down { args } => match commands::migrate(
+            &mut backend,
+            &migration_directory,
+            args.current_version_id,
+            args.target_version_id,
+            migration::MigrationDirection::Down,
+            args.plan,
+            args.dry_run
+        ).await {
+            Ok(_) => SwellowOutput {
+                command: command_name,
+                status: SwellowStatus::Success,
+                data: None,
+                error: None,
+            },
+            Err(e) => SwellowOutput {
+                command: command_name,
+                status: SwellowStatus::Error,
+                data: None,
+                error: Some((&e).into()),
+            },
+        }
+        cli::Commands::Snapshot { } => match commands::snapshot(
+            &mut backend,
+            &migration_directory
+        ) {
+            Ok(_) => SwellowOutput {
+                command: command_name,
+                status: SwellowStatus::Success,
+                data: None,
+                error: None,
+            },
+            Err(e) => SwellowOutput {
+                command: command_name,
+                status: SwellowStatus::Error,
+                data: None,
+                error: Some((&e).into()),
+            },
         }
     }
 }
@@ -66,14 +120,12 @@ async fn run_command(args: cli::Cli) -> output::SwellowOutput<serde_json::Value>
 async fn main() {
     let args: cli::Cli = cli::Cli::parse();
 
-    ux::setup_logging(args.verbose, args.quiet);
+    ux::setup_logging(args.verbose, args.quiet, args.json);
 
-    let result = run_command(command, migration_directory, backend).await;
+    let result = run_command(&args).await;
 
     if args.json {
         println!("{}", serde_json::to_string_pretty(&result).unwrap());
-    } else {
-        ux::render_human_output(&result);
     }
 
     if let SwellowStatus::Error = result.status {

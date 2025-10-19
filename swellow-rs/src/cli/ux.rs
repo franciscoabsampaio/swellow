@@ -3,7 +3,14 @@ use crate::parser::Resource;
 use std::fmt::Write;
 
 
-pub fn setup_logging(verbose: u8, quiet: bool) {
+pub fn setup_logging(verbose: u8, quiet: bool, json: bool) {
+    if json {
+        // Mute all logging if JSON output is enabled
+        tracing::subscriber::set_global_default(tracing::subscriber::NoSubscriber::default())
+            .expect("Setting no-op subscriber failed");
+        return;
+    }
+
     let level = if quiet {
         tracing::Level::ERROR
     } else { match verbose {

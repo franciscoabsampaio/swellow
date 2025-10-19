@@ -14,45 +14,48 @@
 //   },
 //   "timestamp": "2025-10-17T15:52:12Z"
 // }
-use crate::error::{SwellowError, SwellowErrorKind};
+use crate::{db::EngineError, error::{SwellowError, SwellowErrorKind}, parser::ParseErrorKind};
 use serde::Serialize;
 
 
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SwellowErrorJson {
-    Engine(String),
-    InvalidVersionInterval(String),
-    IoDirectoryCreate(String),
-    IoFileWrite(String),
-    Parse(String),
+    Engine { message: String },
+    FileNotFound { message: String },
+    Io { message: String },
+    Parser { message: String },
+    Version { message: String },
 }
 
 impl From<&SwellowError> for SwellowErrorJson {
-    fn from(e: &SwellowError) -> Self {
-        // The pretty CLI output (stderr-like message)
-        let stderr = format!("{e}");
+    fn from(error: &SwellowError) -> Self {
+        let stderr = format!("{error}");
 
-        match &e.kind {
-            SwellowErrorKind::Engine(_) => {
-                Self::Engine(stderr)
+        match &error.kind {
+            SwellowErrorKind::Engine(_) => Self::Engine { message: stderr },
+            SwellowErrorKind::InvalidVersionInterval(..) => Self::Version { message: stderr },
+            SwellowErrorKind::IoDirectoryCreate {..} | SwellowErrorKind::IoFileWrite {..} => {
+                Self::Io { message: stderr }
             }
-            SwellowErrorKind::InvalidVersionInterval(..) => {
-                Self::InvalidVersionInterval(stderr)
-            }
-            SwellowErrorKind::IoDirectoryCreate {..} => {
-                Self::IoDirectoryCreate(stderr)
-            }
-            SwellowErrorKind::IoFileWrite {..} => {
-                Self::IoFileWrite(stderr)
-            }
-            SwellowErrorKind::Parse(_) => {
-                Self::Parse(stderr)
+            SwellowErrorKind::Parse(e) => match &e.kind {
+                ParseErrorKind::FileNotFound {..} => Self::FileNotFound { message: stderr },
+                ParseErrorKind::InvalidDirectory(_) => Self::Io { message: stderr },
+                ParseErrorKind::InvalidVersionFormat(_) => Self::Version { message: stderr },
+                ParseErrorKind::InvalidVersionNumber(_) => Self::Version { message: stderr },
+                ParseErrorKind::Io {..} => Self::Io { message: stderr },
+                ParseErrorKind::NoMigrationsInRange(..) => Self::FileNotFound { message: stderr },
+                ParseErrorKind::Statement(_) | ParseErrorKind::Tokens(_) => Self::Parser { message: stderr },
             }
         }
     }
 }
 
+impl From<&EngineError> for SwellowErrorJson {
+    fn from(e: &EngineError) -> Self {
+        Self::Engine { message: format!("{e}") }
+    }
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -69,16 +72,29 @@ pub struct SwellowOutput<T: Serialize> {
     pub error: Option<SwellowErrorJson>,
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::{SwellowError, error::SwellowErrorKind, output::SwellowErrorJson};
-    
+    use super::*;
+    use serde_json::Value;
+
     #[test]
-    fn serializes_to_expected_json() {
-        let err = SwellowError { kind: SwellowErrorKind::InvalidVersionInterval(3, 7) };
-        let json = SwellowErrorJson::from(&err);
-        let s = serde_json::to_string(&json).unwrap();
-        assert_eq!(s, r#"{"type":"invalid_version_interval",,"from":3,"to":7}"#);
+    fn wraps_output_as_error_correctly() {
+        let err = SwellowError {
+            kind: SwellowErrorKind::InvalidVersionInterval(5, 3),
+        };
+
+        let output = SwellowOutput::<()> {
+            command: "plan".to_string(),
+            status: SwellowStatus::Error,
+            data: None,
+            error: Some((&err).into()),
+        };
+
+        let s = serde_json::to_string(&output).unwrap();
+        let v: Value = serde_json::from_str(&s).unwrap();
+
+        assert_eq!(v["status"], "error");
+        assert_eq!(v["command"], "plan");
+        assert_eq!(v["error"]["type"], "version");
     }
 }

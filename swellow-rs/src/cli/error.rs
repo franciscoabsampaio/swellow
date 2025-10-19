@@ -1,6 +1,5 @@
 use crate::{db::EngineError, parser::ParseError};
 
-use serde::Serialize;
 use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
