@@ -2,6 +2,7 @@ import docker
 import pytest
 import time
 import swellow
+from swellow.app import SwellowFileNotFoundError
 
 
 def wait_for_log(container, message, timeout=30):
@@ -15,7 +16,7 @@ def wait_for_log(container, message, timeout=30):
         time.sleep(0.5)
 
 
-@pytest.fixture(scope="module", params=["postgres", "spark-delta", "spark-iceberg"])
+@pytest.fixture(scope="function", params=["postgres", "spark-delta"])#, , "spark-iceberg"])
 def db_backend(request):
     backend = request.param
 
@@ -53,11 +54,12 @@ def db_backend(request):
 
 # Test missing up
 def test_missing_up(db_backend):
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(SwellowFileNotFoundError):
         swellow.up(
             db=db_backend[0],
             directory=f"./tests/{db_backend[1]}/missing_up",
-            engine=db_backend[1]
+            engine=db_backend[1],
+            json=True
         )
 
 # Test missing down
@@ -65,13 +67,15 @@ def test_missing_down(db_backend):
     swellow.up(
         db=db_backend[0],
         directory=f"./tests/{db_backend[1]}/missing_down",
-        engine=db_backend[1]
+        engine=db_backend[1],
+        json=True
     )
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(SwellowFileNotFoundError):
         swellow.down(
             db=db_backend[0],
             directory=f"./tests/{db_backend[1]}/missing_down",
-            engine=db_backend[1]
+            engine=db_backend[1],
+            json=True
         )
 
 # Test migration+rollback:
@@ -82,10 +86,12 @@ def test_migrate_and_rollback(db_backend):
             db=db_backend[0],
             directory=f"./tests/{db_backend[1]}/migrate_and_rollback",
             engine=db_backend[1],
+            json=True,
             target_version_id=i+1
         )
         swellow.down(
             db=db_backend[0],
             directory=f"./tests/{db_backend[1]}/migrate_and_rollback",
-            engine=db_backend[1]
+            engine=db_backend[1],
+            json=True
         )

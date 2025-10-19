@@ -39,6 +39,7 @@ def main():
     parser.add_argument("--engine", required=True, default="postgres")
     parser.add_argument("-v", "--verbose", action="count", default=0)
     parser.add_argument("-q", "--quiet", action="store_true")
+    parser.add_argument("--json", action="store_true")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -62,21 +63,18 @@ def main():
 
     try:
         if args.command == "peck":
-            return_code = peck(args.db, args.dir, args.engine)
+            return_code = peck(args.db, args.dir, args.engine, args.verbose, args.quiet, args.json)
         elif args.command == "up":
-            return_code = up(args.db, args.dir, args.engine, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
+            return_code = up(args.db, args.dir, args.engine, args.verbose, args.quiet, args.json, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
         elif args.command == "down":
-            return_code = down(args.db, args.dir, args.engine, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
+            return_code = down(args.db, args.dir, args.engine, args.verbose, args.quiet, args.json, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
         elif args.command == "snapshot":
-            return_code = snapshot(args.db, args.dir, args.engine)
-    except FileNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return_code = 2
-    except SwellowError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return_code = 1
+            return_code = snapshot(args.db, args.dir, args.engine, args.verbose, args.quiet, args.json)
     except Exception as e:
-        print(f"Unexpected error: {e}", file=sys.stderr)
-        return_code = 1
+        # Print message from the exception
+        print(f"Error: {e}", file=sys.stderr)
 
-    sys.exit(return_code)
+        # If it was raised from our system, use its exit code
+        return_code = getattr(e, "exit_code", 1)
+    finally:
+        sys.exit(return_code)

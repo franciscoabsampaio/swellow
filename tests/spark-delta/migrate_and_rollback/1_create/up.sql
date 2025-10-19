@@ -1,4 +1,4 @@
-CREATE TABLE flock (
+CREATE TABLE IF NOT EXISTS flock (
     bird_id BIGINT,
     common_name STRING NOT NULL,
     latin_name STRING NOT NULL,
@@ -6,5 +6,4 @@ CREATE TABLE flock (
     dtm_hatched_at TIMESTAMP,
     dtm_last_seen_at TIMESTAMP
 )
-USING delta
-LOCATION '/opt/spark/spark-warehouse/flock';
+USING DELTA;

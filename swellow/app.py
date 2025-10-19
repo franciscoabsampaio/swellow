@@ -1,13 +1,39 @@
+import json
 from pathlib import Path
 import platform
 import subprocess
-from typing import Optional
 
+
+_parse_verbosity = lambda verbose: "" if verbose == 0 else ("-vv" if verbose > 1 else "-v")
 
 # Custom error classes
 class SwellowError(Exception):
-    """Base exception for swellow errors."""
-    pass
+    """Base class for all Swellow CLI errors."""
+    exit_code = 1  # default
+
+    def __init__(self, message: str = ""):
+        super().__init__(message)
+        self.message = message
+
+
+class SwellowEngineError(SwellowError):
+    exit_code = 3
+
+
+class SwellowFileNotFoundError(SwellowError):
+    exit_code = 2
+
+
+class SwellowIoError(SwellowError):
+    exit_code = 4
+
+
+class SwellowParserError(SwellowError):
+    exit_code = 5
+
+
+class SwellowVersionError(SwellowError):
+    exit_code = 6
 
 
 # Utility: find the Rust binary packaged with Python
@@ -27,6 +53,32 @@ def _swellow_bin() -> Path:
         raise RuntimeError(f"Unsupported OS / architecture: {system} / {arch}")
 
 
+def _parse_error(stdout: str, stderr: str):
+    try:
+        result = json.loads(stdout)
+    except json.JSONDecodeError:
+        raise SwellowError(f"Non-JSON error output:\n{stderr or stdout}")
+
+    if result.get("status") != "error":
+        raise SwellowError(f"Unexpected non-error response: {result}")
+
+    error = result.get("error") or {}
+    err_type = error.get("type", "unknown")
+    message = error.get("message", "Unknown error")
+
+    if err_type == "engine":
+        raise SwellowEngineError(message)
+    elif err_type == "file_not_found":
+        raise SwellowFileNotFoundError(message)
+    elif err_type == "io":
+        raise SwellowIoError(message)
+    elif err_type == "parser":
+        raise SwellowParserError(message)
+    elif err_type == "version":
+        raise SwellowVersionError(message)
+    else:
+        raise SwellowError(message)
+
 
 def _run_swellow(*args, capture_output=True) -> int:
     """
@@ -41,18 +93,9 @@ def _run_swellow(*args, capture_output=True) -> int:
     stdout = result.stdout or ""
     stderr = result.stderr or ""
     
-    # Check for common errors in output
+    # Handle errors
     if result.returncode != 0:
-        # Missing .sql file
-        list_of_error_msgs=[
-            ".sql\": No such file or directory",
-            "No migrations found in interval"
-        ]
-        for msg in list_of_error_msgs:
-            if msg in stdout or msg in stderr:
-                raise FileNotFoundError(stdout + stderr)
-        # Return a generic error
-        raise SwellowError(stdout + stderr)
+        _parse_error(stdout, stderr)
     
     return result.returncode
 
@@ -68,9 +111,12 @@ def resolve_directory(f):
 def up(
     db: str,
     directory: str,
-    engine: str,
-    current_version_id: Optional[int] = None,
-    target_version_id: Optional[int] = None,
+    engine: str = "postgres",
+    verbose: int = 0,
+    quiet: bool = False,
+    json: bool = False,
+    current_version_id: int = None,
+    target_version_id: int = None,
     plan: bool = False,
     dry_run: bool = False,
 ) -> int:
@@ -80,6 +126,10 @@ def up(
     Args:
         db: Database connection string.
         directory: Path to the migration directory.
+        engine: The database engine to use.
+        verbose: Verbosity level (0-2).
+        quiet: If True, suppress all output.
+        json: If True, output in JSON format. Suppresses normal output.
         current_version_id: The version ID currently applied (if known).
         target_version_id: The version ID to migrate up to (if specified).
         plan: If True, output the migration plan without applying changes.
@@ -88,7 +138,17 @@ def up(
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    args = ["--db", db, "--dir", directory, "--engine", engine, "up"]
+    args = ["--db", db, "--dir", directory, "--engine", engine]
+
+    if verbose:
+        args.append(_parse_verbosity(verbose))
+    if quiet:
+        args.append("--quiet")
+    if json:
+        args.append("--json")
+
+    args.append("up")
+    
     if current_version_id is not None:
         args += ["--current-version-id", str(current_version_id)]
     if target_version_id is not None:
@@ -104,9 +164,12 @@ def up(
 def down(
     db: str,
     directory: str,
-    engine: str,
-    current_version_id: Optional[int] = None,
-    target_version_id: Optional[int] = None,
+    engine: str = "postgres",
+    verbose: int = 0,
+    quiet: bool = False,
+    json: bool = False,
+    current_version_id: int = None,
+    target_version_id: int = None,
     plan: bool = False,
     dry_run: bool = False,
 ) -> int:
@@ -116,6 +179,10 @@ def down(
     Args:
         db: Database connection string.
         directory: Path to the migration directory.
+        engine: The database engine to use.
+        verbose: Verbosity level (0-2).
+        quiet: If True, suppress all output.
+        json: If True, output in JSON format. Suppresses normal output.
         current_version_id: The version ID currently applied (if known).
         target_version_id: The version ID to migrate down to (if specified).
         plan: If True, output the rollback plan without applying changes.
@@ -124,7 +191,17 @@ def down(
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    args = ["--db", db, "--dir", directory, "--engine", engine, "down"]
+    args = ["--db", db, "--dir", directory, "--engine", engine]
+
+    if verbose:
+        args.append(_parse_verbosity(verbose))
+    if quiet:
+        args.append("--quiet")
+    if json:
+        args.append("--json")
+
+    args.append("down")
+
     if current_version_id is not None:
         args += ["--current-version-id", str(current_version_id)]
     if target_version_id is not None:
@@ -137,30 +214,72 @@ def down(
 
 
 @resolve_directory
-def peck(db: str, directory: str, engine: str) -> int:
+def peck(
+    db: str,
+    directory: str,
+    engine: str = "postgres",
+    verbose: int = 0,
+    quiet: bool = False,
+    json: bool = False
+) -> int:
     """
     Verify connectivity to the database and migration directory.
 
     Args:
         db: Database connection string.
         directory: Path to the migration directory.
+        engine: The database engine to use.
+        verbose: Verbosity level (0-2).
+        quiet: If True, suppress all output.
+        json: If True, output in JSON format. Suppresses normal output.
 
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    return _run_swellow("--db", db, "--dir", directory, "--engine", engine, "peck")
+    args = ["--db", db, "--dir", directory, "--engine", engine]
+
+    if verbose:
+        args.append(_parse_verbosity(verbose))
+    if quiet:
+        args.append("--quiet")
+    if json:
+        args.append("--json")
+
+    args.append("up")
+    
+    return _run_swellow(*args)
 
 
 @resolve_directory
-def snapshot(db: str, directory: str, engine: str) -> int:
+def snapshot(
+    db: str,
+    directory: str,
+    engine: str = "postgres",
+    verbose: int = 0,
+    quiet: bool = False,
+    json: bool = False,
+) -> int:
     """
     Create a snapshot of the current migration directory state.
 
     Args:
         db: Database connection string.
         directory: Path to the migration directory.
+        engine: The database engine to use.
+        verbose: Verbosity level (0-2).
+        quiet: If True, suppress all output.
+        json: If True, output in JSON format.
 
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    return _run_swellow("--db", db, "--dir", directory, "--engine", engine, "snapshot")
+    args = ["--db", db, "--dir", directory, "--engine", engine]
+
+    if verbose:
+        args.append(_parse_verbosity(verbose))
+    if quiet:
+        args.append("--quiet")
+    if json:
+        args.append("--json")
+
+    return _run_swellow(*args)
