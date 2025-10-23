@@ -160,15 +160,15 @@ jobs:
           name: release-dist-${{ env.PROJECT_NAME }}
           path: dist/
 
-  compute-hashes:
+  draft-release-and-attest:
     needs: [tag-version, build-python-dist]
     permissions:
       actions: read
       id-token: write
       contents: write
+      attestations: write
     runs-on: ubuntu-latest
-    outputs:
-      hash_b64: ${{ steps.hash.outputs.hash_b64 }}
+    
     steps:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -176,18 +176,6 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: release/
-
-      # 🔑 Compute SHA256 hashes and encode in base64 for SLSA workflow
-      - name: Compute hashes
-        id: hash
-        run: |
-          set -euo pipefail
-          for f in release/*; do
-            sha=$(sha256sum "$f" | cut -d ' ' -f1)
-            echo "${sha}  $f" >> hashes.txt
-          done
-          b64=$(base64 -w0 hashes.txt)
-          echo "hash_b64=$b64" >> $GITHUB_OUTPUT
 
       # Create draft release with distributable and Rust binaries
       - name: Create draft release
@@ -200,23 +188,24 @@ jobs:
             
             - Binaries for multiple platforms (`release-binary-<platform>`).
             - Source code archives.
-            - Provenance.
+            - Build attestations (GitHub native).
           draft: true
           files: release/*
           overwrite_files: true
-
-  provenance:
-    needs: [tag-version, compute-hashes]
-    permissions:
-      actions: read
-      id-token: write
-      contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
-    with:
-      base64-subjects: ${{ needs.compute-hashes.outputs.hash_b64 }}
-      upload-assets: true
-      upload-tag-name: v${{ needs.tag-version.outputs.version }}
-      draft-release: true
+          
+      # Generate attestations for each artifact
+      - name: Attest build artifacts
+        uses: github/attest@v1
+        with:
+          subject-path: "release/*"
+          predicate-type: https://slsa.dev/provenance/v1
+          predicate: |
+            {
+              "buildType": "https://github.com/actions/build",
+              "builder": "github-actions",
+              "source": "${{ github.repository }}",
+              "version": "${{ needs.tag-version.outputs.version }}"
+            }
 
   test-python-distributable:
     needs: [build-python-dist]
