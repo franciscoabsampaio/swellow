@@ -130,8 +130,6 @@ impl DbEngine for SparkEngine {
                 AND status = 'LOCKED'
         "#;
 
-        println!("{:?}", self.fetch_optional_i64(query_select_lock).await?);
-
         if self.fetch_optional_i64(query_select_lock).await?.is_some() {
             return Err(EngineError { kind: EngineErrorKind::LockConflict })
         }

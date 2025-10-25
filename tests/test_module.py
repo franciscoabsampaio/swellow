@@ -16,7 +16,7 @@ def wait_for_log(container, message, timeout=30):
         time.sleep(0.5)
 
 
-@pytest.fixture(scope="function", params=["postgres", "spark-delta"])#, , "spark-iceberg"])
+@pytest.fixture(scope="function", params=["postgres", "spark-delta", "spark-iceberg"])
 def db_backend(request):
     backend = request.param
 
@@ -34,7 +34,11 @@ def db_backend(request):
         conn_url = "postgresql://postgres:postgres@localhost:5432/postgres"
 
     elif backend in ["spark-delta", "spark-iceberg"]:
-        image = docker_client.images.pull("franciscoabsampaio/spark-connect", tag="latest")
+        if backend == "spark-delta":
+            tag = 'delta'
+        else:
+            tag = 'iceberg'
+        image = docker_client.images.pull("franciscoabsampaio/spark-connect-server", tag=tag)
         container = docker_client.containers.run(
             image,
             detach=True,
