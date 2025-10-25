@@ -3,6 +3,7 @@ use crate::db::{EngineError, error::EngineErrorKind};
 use crate::db::DbEngine;
 use arrow;
 use arrow::array::{Array, Int64Array, RecordBatch};
+use arrow::datatypes::DataType;
 use spark_connect as spark;
 
 
@@ -83,47 +84,60 @@ impl DbEngine for SparkEngine {
             None => return Ok(None),
         };
 
-        println!("{:?}", first_batch);
-
-        // If the batch has no columns, return None
-        let first_column = match first_batch.column(0).as_any().downcast_ref::<Int64Array>() {
-            Some(col) => col,
-            None => {
-                return Err(EngineError { kind: EngineErrorKind::ColumnTypeMismatch {
-                    column_index: 0,
-                    expected: "Int64Array",
-                    found: first_batch.schema().field(0).data_type().clone(),
-                }})
-            }
+        // Extract schema field safely
+        let schema = first_batch.schema();
+        let field = match schema.fields().get(0) {
+            Some(f) => f,
+            None => return Ok(None),
         };
 
-        // If column is empty, return None
-        if first_column.is_empty() {
+        // Ensure the first column is actually Int64
+        if field.data_type() != &DataType::Int64 {
+            return Err(EngineError {
+                kind: EngineErrorKind::ColumnTypeMismatch {
+                    column_index: 0,
+                    expected: "Int64Array",
+                    found: field.data_type().clone(),
+                },
+            });
+        }
+
+        let Some(col) = first_batch.column(0).as_any().downcast_ref::<Int64Array>() else {
+            return Ok(None);
+        };
+
+        // If the column is empty, return None
+        if col.is_empty() {
             return Ok(None);
         }
 
-        // Return the first value
-        Ok(Some(first_column.value(0)))
+        // Return the first value (only if not null)
+        if col.is_null(0) {
+            return Ok(None);
+        }
+
+        Ok(Some(col.value(0)))
     }
 
     async fn acquire_lock(&mut self) -> Result<(), EngineError> {
-        let query = r#"
-            MERGE INTO swellow_records t
-            USING (
-                SELECT 0 AS version_id,
-                    'LOCK' AS object_type,
-                    'LOCK' AS object_name_before,
-                    'LOCK' AS object_name_after,
-                    'LOCKED' AS status,
-                    'LOCK' AS checksum,
-                    current_timestamp() AS dtm_updated_at
-            ) s
-            ON t.version_id = s.version_id
-            AND t.object_type = s.object_type
-            AND t.object_name_before = s.object_name_before
-            AND t.object_name_after = s.object_name_after
-            WHEN NOT MATCHED THEN
-            INSERT (
+        let query_select_lock = r#"
+            SELECT *
+            FROM swellow_records
+            WHERE version_id = 0
+                AND object_type = 'LOCK'
+                AND object_name_before = 'LOCK'
+                AND object_name_after = 'LOCK'
+                AND status = 'LOCKED'
+        "#;
+
+        println!("{:?}", self.fetch_optional_i64(query_select_lock).await?);
+
+        if self.fetch_optional_i64(query_select_lock).await?.is_some() {
+            return Err(EngineError { kind: EngineErrorKind::LockConflict })
+        }
+
+        self.session.query(r#"
+            INSERT INTO swellow_records (
                 version_id,
                 object_type,
                 object_name_before,
@@ -134,22 +148,34 @@ impl DbEngine for SparkEngine {
                 dtm_updated_at
             )
             VALUES (
-                s.version_id,
-                s.object_type,
-                s.object_name_before,
-                s.object_name_after,
-                s.status,
-                s.checksum,
+                0,
+                'LOCK',
+                'LOCK',
+                'LOCK',
+                'LOCKED',
+                'LOCK',
                 current_timestamp(),
                 current_timestamp()
             )
-        "#;
-        
-        if self.fetch_optional_i64(query).await?.is_none() {
-            Err(EngineError { kind: EngineErrorKind::LockConflict })
-        } else {
-            Ok(())
-        }
+        "#)
+            .execute()
+            .await?;
+
+        Ok(())
+    }
+
+    async fn release_lock(&mut self) -> Result<(), EngineError> {
+        self.session.query(r#"
+            DELETE FROM swellow_records
+            WHERE version_id = 0
+                AND object_type = 'LOCK'
+                AND object_name_before = 'LOCK'
+                AND object_name_after = 'LOCK'
+        "#)
+            .execute()
+            .await?;
+
+        Ok(())
     }
 
     async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError> {

@@ -45,8 +45,8 @@ impl fmt::Display for EngineErrorKind {
             Self::LockConflict => write!(f, "Lock acquisition failed - lock record is taken"),
             Self::PGDump(stderr) => write!(f, "pg_dump failed: '{stderr:?}'"),
             Self::Process{cmd, .. } => write!(f, "Failed to run a command: '{cmd}'"),
-            Self::SQLX(_) => write!(f, "sqlx::Error"),
-            Self::Spark(_) => write!(f, "SparkError"),
+            Self::SQLX(e) => write!(f, "{e}"),
+            Self::Spark(e) => write!(f, "{e}"),
         }
     }
 }

@@ -49,6 +49,14 @@ impl EngineBackend {
         }
     }
 
+    pub async fn release_lock(&mut self) -> Result<(), EngineError> {
+        match self {
+            EngineBackend::Postgres(engine) => engine.release_lock().await,
+            EngineBackend::SparkDelta(engine) => engine.release_lock().await,
+            EngineBackend::SparkIceberg(engine) => engine.release_lock().await,
+        }
+    }
+
     pub async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.disable_records(current_version_id).await,
@@ -149,6 +157,7 @@ pub trait DbEngine {
     async fn execute(&mut self, sql: &str) -> Result<(), EngineError>;
     async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError>;
     async fn acquire_lock(&mut self) -> Result<(), EngineError>;
+    async fn release_lock(&mut self) -> Result<(), EngineError>;
     async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError>;
     async fn upsert_record(
         &mut self,

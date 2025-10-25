@@ -109,6 +109,12 @@ If no record is enabled, swellow will assume the current version to be 0.",
         help = "Generate the migration, execute it, then rollback the transaction.",
     )]
     pub dry_run: bool,
+
+    #[arg(
+        long,
+        help = "Ignore acquiring locks. ⚠️ Warning: sequential execution of migrations is not guaranteed when this flag is set.",
+    )]
+    pub ignore_locks: bool,
 }
 
 #[derive(Subcommand)]

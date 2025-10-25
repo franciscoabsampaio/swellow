@@ -16,9 +16,10 @@
 // }
 use crate::{db::EngineError, error::{SwellowError, SwellowErrorKind}, parser::ParseErrorKind};
 use serde::Serialize;
+use serde_json::Value;
 
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SwellowErrorJson {
     Engine { message: String },
@@ -71,6 +72,29 @@ pub struct SwellowOutput<T: Serialize> {
     pub data: Option<T>,
     pub error: Option<SwellowErrorJson>,
 }
+
+impl SwellowOutput<Value> {
+    pub fn from_result(
+        command: impl Into<String>,
+        result: Result<(), SwellowError>,
+    ) -> Self {
+        match result {
+            Ok(_) => Self {
+                command: command.into(),
+                status: SwellowStatus::Success,
+                data: None,
+                error: None,
+            },
+            Err(e) => Self {
+                command: command.into(),
+                status: SwellowStatus::Error,
+                data: None,
+                error: Some((&e).into()),
+            },
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

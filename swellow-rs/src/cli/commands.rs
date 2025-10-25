@@ -24,16 +24,6 @@ async fn plan(
     target_version_id: Option<i64>,
     direction: &MigrationDirection,
 ) -> Result<MigrationCollection, SwellowError> {
-    peck(backend).await?;
-
-    tracing::info!("Beginning transaction...");
-    backend.begin().await?;
-
-    // Acquire a lock on the swellow_records table
-    // To ensure no other migration process is underway.
-    tracing::info!("Acquiring lock on records table...");
-    backend.acquire_lock().await?;
-
     // Determine current migration version
     let latest_version_from_records = backend
         .fetch_optional_i64(
@@ -96,7 +86,22 @@ pub async fn migrate(
     direction: MigrationDirection,
     flag_plan: bool,
     flag_dry_run: bool,
+    flag_ignore_locks: bool,
 ) -> Result<(), SwellowError> {
+    peck(backend).await?;
+
+    tracing::info!("Beginning transaction...");
+    backend.begin().await?;
+
+    // Acquire a lock on the swellow_records table
+    // To ensure no other migration process is underway.
+    if flag_ignore_locks {
+        tracing::warn!("⚠️ Ignoring locks: sequential execution of migrations is not guaranteed.");
+    } else {
+        tracing::info!("Acquiring lock on records table...");
+        backend.acquire_lock().await?;
+    }
+
     let migrations = plan(
         backend,
         migration_dir,
