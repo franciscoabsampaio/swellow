@@ -54,6 +54,7 @@ def db_backend(request):
 
     container.stop()
 
+# TODO: Lack of connection returns an EngineError
 # TODO: Test lock already exists
 
 # Test missing up

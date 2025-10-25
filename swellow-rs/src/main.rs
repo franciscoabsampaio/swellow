@@ -27,7 +27,7 @@ async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value
         }
     };
 
-    let output: SwellowOutput<Value> = match &args.command {
+    let mut output: SwellowOutput<Value> = match &args.command {
         cli::Commands::Peck { } => SwellowOutput::from_result(
             "peck",
             commands::peck(&backend).await
@@ -67,15 +67,19 @@ async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value
         ),
     };
 
-    match backend.release_lock().await {
-        Ok(_) => output,
-        Err(e) => SwellowOutput {
-            command: command_name,
-            status: SwellowStatus::Error,
-            data: None,
-            error: Some((&e).into()),
-        },
+    // Try to release lock, but don't overwrite an existing error
+    if let Err(e) = backend.release_lock().await {
+        if output.status == SwellowStatus::Success {
+            // Only override if the main command succeeded
+            output.status = SwellowStatus::Error;
+            output.error = Some((&e).into());
+        } else {
+            // Otherwise log it
+            tracing::error!("Failed to release lock: {e}");
+        }
     }
+
+    output
 }
 
 

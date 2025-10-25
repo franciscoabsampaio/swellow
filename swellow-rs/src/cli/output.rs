@@ -58,7 +58,7 @@ impl From<&EngineError> for SwellowErrorJson {
     }
 }
 
-#[derive(Serialize)]
+#[derive(PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SwellowStatus {
     Success,
