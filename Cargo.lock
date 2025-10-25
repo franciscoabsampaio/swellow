@@ -148,10 +148,8 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-cast",
- "arrow-csv",
  "arrow-data",
  "arrow-ipc",
- "arrow-json",
  "arrow-ord",
  "arrow-row",
  "arrow-schema",
@@ -221,21 +219,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arrow-csv"
-version = "56.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfa9bf02705b5cf762b6f764c65f04ae9082c7cfc4e96e0c33548ee3f67012eb"
-dependencies = [
- "arrow-array",
- "arrow-cast",
- "arrow-schema",
- "chrono",
- "csv",
- "csv-core",
- "regex",
-]
-
-[[package]]
 name = "arrow-data"
 version = "56.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -259,28 +242,6 @@ dependencies = [
  "arrow-schema",
  "arrow-select",
  "flatbuffers",
-]
-
-[[package]]
-name = "arrow-json"
-version = "56.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88cf36502b64a127dc659e3b305f1d993a544eab0d48cce704424e62074dc04b"
-dependencies = [
- "arrow-array",
- "arrow-buffer",
- "arrow-cast",
- "arrow-data",
- "arrow-schema",
- "chrono",
- "half",
- "indexmap",
- "lexical-core",
- "memchr",
- "num",
- "serde",
- "serde_json",
- "simdutf8",
 ]
 
 [[package]]
@@ -740,27 +701,6 @@ checksum = "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3"
 dependencies = [
  "generic-array",
  "typenum",
-]
-
-[[package]]
-name = "csv"
-version = "1.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acdc4883a9c96732e4733212c01447ebd805833b7275a73ca3ee080fd77afdaf"
-dependencies = [
- "csv-core",
- "itoa",
- "ryu",
- "serde",
-]
-
-[[package]]
-name = "csv-core"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d02f3b0da4c6504f86e9cd789d8dbafab48c2321be74e9987593de5a894d93d"
-dependencies = [
- "memchr",
 ]
 
 [[package]]
@@ -2770,12 +2710,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "simdutf8"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
-
-[[package]]
 name = "siphasher"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2817,12 +2751,11 @@ dependencies = [
 
 [[package]]
 name = "spark-connect"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fa97184f060afac71a6310672c0a9574c36a5fa0758241cb85f820e076f0b6b"
+checksum = "e8ca434db754e18063a742c656a2283c7d206be1ece79cc2cd62b29ffa8f7e15"
 dependencies = [
  "arrow",
- "arrow-ipc",
  "chrono",
  "futures-util",
  "http",
