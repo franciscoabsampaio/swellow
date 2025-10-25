@@ -146,7 +146,7 @@ impl DbEngine for SparkEngine {
                 dtm_updated_at
             )
             VALUES (
-                0,
+                SELECT 0,
                 'LOCK',
                 'LOCK',
                 'LOCK',

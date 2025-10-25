@@ -21,7 +21,7 @@ async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value
         Ok(b) => b,
         Err(e) => return SwellowOutput {
             command: command_name,
-            status: SwellowStatus::Success,
+            status: SwellowStatus::Error,
             data: None,
             error: Some((&e).into()),
         }
