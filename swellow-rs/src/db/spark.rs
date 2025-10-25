@@ -83,6 +83,8 @@ impl DbEngine for SparkEngine {
             None => return Ok(None),
         };
 
+        println!("{:?}", first_batch);
+
         // If the batch has no columns, return None
         let first_column = match first_batch.column(0).as_any().downcast_ref::<Int64Array>() {
             Some(col) => col,

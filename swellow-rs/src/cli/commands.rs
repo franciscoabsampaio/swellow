@@ -26,7 +26,7 @@ async fn plan(
 ) -> Result<MigrationCollection, SwellowError> {
     peck(backend).await?;
 
-    tracing::info!("Comencing transaction...");
+    tracing::info!("Beginning transaction...");
     backend.begin().await?;
 
     // Acquire a lock on the swellow_records table
