@@ -1,4 +1,4 @@
-use crate::{db::EngineError, parser::ParseError};
+use crate::{cli::Engine, db::EngineError, parser::ParseError};
 
 use std::error::Error;
 use std::fmt;
@@ -23,7 +23,8 @@ impl Error for SwellowError {
 }
 
 #[derive(Debug)]
-pub enum SwellowErrorKind {    
+pub enum SwellowErrorKind {
+    DryRunUnsupportedEngine(Engine),
     Engine(EngineError),
     InvalidVersionInterval(i64, i64),
     IoDirectoryCreate { source: std::io::Error, path: PathBuf},
@@ -34,6 +35,7 @@ pub enum SwellowErrorKind {
 impl fmt::Display for SwellowErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::DryRunUnsupportedEngine(engine) => write!(f, "Dry run is not supported for engine: {engine:?}"),
             Self::Engine(error) => write!(f, "{}", error.kind),
             Self::InvalidVersionInterval(from, to) => write!(f, "Invalid version interval: from ({from}) > to ({to})"),
             Self::IoDirectoryCreate { path, .. } => write!(f, "Failed to create directory: '{path:?}'"),

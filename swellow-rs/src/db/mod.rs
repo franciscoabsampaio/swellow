@@ -5,7 +5,7 @@ pub use error::{EngineError, EngineErrorKind};
 pub use postgres::PostgresEngine;
 pub use spark::{SparkEngine, SparkCatalog};
 
-use crate::migration::MigrationDirection;
+use crate::{cli, migration::MigrationDirection};
 
 use sqlparser;
 
@@ -17,6 +17,14 @@ pub enum EngineBackend {
 }
 
 impl EngineBackend {
+    pub fn engine(&self) -> cli::Engine {
+        match self {
+            EngineBackend::Postgres(_) => cli::Engine::Postgres,
+            EngineBackend::SparkDelta(_) => cli::Engine::SparkDelta,
+            EngineBackend::SparkIceberg(_) => cli::Engine::SparkIceberg,
+        }
+    }
+
     pub async fn ensure_table(&self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.ensure_table().await,

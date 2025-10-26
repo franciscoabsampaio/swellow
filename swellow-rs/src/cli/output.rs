@@ -34,6 +34,7 @@ impl From<&SwellowError> for SwellowErrorJson {
         let stderr = format!("{error}");
 
         match &error.kind {
+            SwellowErrorKind::DryRunUnsupportedEngine(_) => Self::Engine { message: stderr },
             SwellowErrorKind::Engine(_) => Self::Engine { message: stderr },
             SwellowErrorKind::InvalidVersionInterval(..) => Self::Version { message: stderr },
             SwellowErrorKind::IoDirectoryCreate {..} | SwellowErrorKind::IoFileWrite {..} => {

@@ -88,6 +88,10 @@ pub async fn migrate(
     flag_dry_run: bool,
     flag_ignore_locks: bool,
 ) -> Result<(), SwellowError> {
+    if flag_dry_run && matches!(backend, db::EngineBackend::SparkDelta(_) | db::EngineBackend::SparkIceberg(_)) {
+        return Err(SwellowError { kind: SwellowErrorKind::DryRunUnsupportedEngine(backend.engine()) });
+    }
+
     peck(backend).await?;
 
     tracing::info!("Beginning transaction...");
