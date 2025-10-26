@@ -2,7 +2,7 @@ import docker
 import pytest
 import time
 import swellow
-from swellow.app import SwellowFileNotFoundError
+from swellow.app import SwellowEngineError, SwellowFileNotFoundError
 
 
 def wait_for_log(container, message, timeout=30):
@@ -54,10 +54,18 @@ def db_backend(request):
 
     container.stop()
 
-# TODO: Lack of connection returns an EngineError
+# Test no connection returns an EngineError
+def test_no_connection():
+    with pytest.raises(SwellowEngineError):
+        swellow.peck(
+            db="postgresql://invalid:invalid@localhost:5432/invalid",
+            directory=f"./tests/postgres/missing_up",
+            json=True
+        )
+
 # TODO: Test lock already exists
 
-# Test missing up
+# Test missing up.sql failure
 def test_missing_up(db_backend):
     with pytest.raises(SwellowFileNotFoundError):
         swellow.up(
@@ -67,7 +75,7 @@ def test_missing_up(db_backend):
             json=True
         )
 
-# Test missing down
+# Test missing down.sql failure
 def test_missing_down(db_backend):
     swellow.up(
         db=db_backend[0],
@@ -83,7 +91,7 @@ def test_missing_down(db_backend):
             json=True
         )
 
-# Test migration+rollback:
+# Test migration with rollback
 def test_migrate_and_rollback(db_backend):
     # Migrate and rollback to/from progressively higher versions.
     for i in range(3):
