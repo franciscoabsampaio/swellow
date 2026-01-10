@@ -60,7 +60,9 @@ impl From<&SwellowError> for SwellowErrorJson {
                 ParseErrorKind::InvalidVersionNumber(_) => Self::Version { message: stderr },
                 ParseErrorKind::Io {..} => Self::Io { message: stderr },
                 ParseErrorKind::NoMigrationsInRange(..) => Self::FileNotFound { message: stderr },
-                ParseErrorKind::Statement(_) | ParseErrorKind::Tokens(_) => Self::Parser { message: stderr },
+                ParseErrorKind::Tokenizer(_) |
+                ParseErrorKind::Statement(_) |
+                ParseErrorKind::Tokens(_) => Self::Parser { message: stderr },
             }
         }
     }

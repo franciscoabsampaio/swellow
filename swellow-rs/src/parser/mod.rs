@@ -61,7 +61,7 @@ mod tests {
 
     fn make_collection(dialect: ReferenceToStaticDialect, sql: &str) -> StatementCollection {
         StatementCollection::new(dialect)
-            .parse_sql(sql)
+            .parse_sql(sql).unwrap()
     }
 
     #[test]

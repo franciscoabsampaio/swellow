@@ -47,11 +47,11 @@ pub struct Migration {
 }
 
 impl Migration {
-    pub fn new(dialect: ReferenceToStaticDialect, path: PathBuf, sql: &str) -> Self {
+    pub fn new(dialect: ReferenceToStaticDialect, path: PathBuf, sql: &str) -> Result<Migration, ParseError> {
         let sql = sql.to_string();
         let statements = StatementCollection::new(dialect).parse_sql(&sql);
 
-        Migration { path, sql, statements }
+        Ok(Migration { path, sql, statements: statements? })
     }
 
     pub fn from_file(dialect: ReferenceToStaticDialect, path: PathBuf) -> Result<Self, ParseError> {
@@ -62,7 +62,7 @@ impl Migration {
         let sql = fs::read_to_string(&path)
             .map_err(|e| ParseError { kind: ParseErrorKind::Io { path: path.clone(), source: Box::new(e) } })?;
 
-        Ok(Migration::new(dialect, path, &sql))
+        Ok(Migration::new(dialect, path, &sql)?)
     }
 
     pub fn resources(&self) -> ResourceCollection {

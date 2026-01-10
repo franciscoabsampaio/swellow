@@ -84,9 +84,13 @@ impl StatementCollection {
         }
     }
 
-    pub fn parse_sql(&mut self, sql: &str) -> Self {
+    pub fn parse_sql(&mut self, sql: &str) -> Result<Self, ParseError> {
         let mut tokenizer = Tokenizer::new(&*self.dialect, sql);
-        let tokens = tokenizer.tokenize().unwrap();
+        let tokens = tokenizer
+            .tokenize()
+            .map_err(|err| ParseError {
+                kind: ParseErrorKind::Tokenizer(err)
+            })?;
 
         let mut current_tokens = vec![];
 
@@ -108,7 +112,7 @@ impl StatementCollection {
             }
         }
 
-        self.clone()
+        Ok(self.clone())
     }
     
     pub fn to_strings(&self) -> Vec<String> {

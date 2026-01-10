@@ -1,4 +1,4 @@
-use sqlparser::{ast::Statement, tokenizer::Token};
+use sqlparser::{ast::Statement, tokenizer::{Token, TokenizerError}};
 use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
@@ -30,6 +30,7 @@ pub enum ParseErrorKind {
     InvalidVersionNumber(String),
     Io { path: PathBuf, source: Box<dyn Error> },
     NoMigrationsInRange(PathBuf, i64, i64),
+    Tokenizer(TokenizerError),
     Tokens(Vec<Token>),
     Statement(Statement),
 }
@@ -43,6 +44,7 @@ impl fmt::Display for ParseErrorKind {
             Self::InvalidVersionNumber(version) => write!(f, "Invalid version number: '{version}'"),
             Self::Io { path, .. } => write!(f, "Failed to read file: '{path:?}'"),
             Self::NoMigrationsInRange(path, from, to) => write!(f, "No migrations found in '{path:?}' for range [{from}..={to}]"),
+            Self::Tokenizer( err ) => write!(f, "Failed to initialize tokenizer: {err:?}"),
             Self::Tokens(tokens) => write!(f, "Failed to parse tokens into statement: {tokens:?}"),
             Self::Statement(stmt) => write!(f, "Failed to parse any resources from the statement: '{stmt}'"),
         }
