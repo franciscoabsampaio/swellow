@@ -106,10 +106,7 @@ mod tests {
             ),
             (EngineErrorKind::LockConflict, "Lock acquisition failed"),
             (EngineErrorKind::PGDump("Big mistake".to_string()), "pg_dump failed"),
-            (
-                EngineErrorKind::SQLX(sqlx::Error::RowNotFound),
-                "sqlx::Error",
-            ),
+            (EngineErrorKind::SQLX(sqlx::Error::RowNotFound), "no rows returned"),
         ];
 
         for (kind, expect) in cases {
