@@ -36,7 +36,7 @@ def main():
 
     parser.add_argument("--db", required=True)
     parser.add_argument("--dir", required=True)
-    parser.add_argument("--engine", required=True, default="postgres")
+    parser.add_argument("--engine", required=False, default="postgres")
     parser.add_argument("-v", "--verbose", action="count", default=0)
     parser.add_argument("-q", "--quiet", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -61,15 +61,17 @@ def main():
 
     args = parser.parse_args()
 
+    args.dir = str(Path(args.dir).resolve())
+
     try:
         if args.command == "peck":
-            return_code = peck(args.db, args.dir, args.engine, args.verbose, args.quiet, args.json)
+            return_code = peck(args.db, args.dir, engine=args.engine, verbose=args.verbose, quiet=args.quiet, json=args.json)
         elif args.command == "up":
-            return_code = up(args.db, args.dir, args.engine, args.verbose, args.quiet, args.json, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
+            return_code = up(args.db, args.dir, engine=args.engine, verbose=args.verbose, quiet=args.quiet, json=args.json, current_version_id=args.current_version_id, target_version_id=args.target_version_id, plan=args.plan, dry_run=args.dry_run)
         elif args.command == "down":
-            return_code = down(args.db, args.dir, args.engine, args.verbose, args.quiet, args.json, args.current_version_id, args.target_version_id, args.plan, args.dry_run)
+            return_code = down(args.db, args.dir, engine=args.engine, verbose=args.verbose, quiet=args.quiet, json=args.json, current_version_id=args.current_version_id, target_version_id=args.target_version_id, plan=args.plan, dry_run=args.dry_run)
         elif args.command == "snapshot":
-            return_code = snapshot(args.db, args.dir, args.engine, args.verbose, args.quiet, args.json)
+            return_code = snapshot(args.db, args.dir, engine=args.engine, verbose=args.verbose, quiet=args.quiet, json=args.json)
     except Exception as e:
         # Print message from the exception
         print(f"Error: {e}", file=sys.stderr)

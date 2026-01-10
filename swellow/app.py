@@ -100,14 +100,6 @@ def _run_swellow(*args, capture_output=True) -> int:
     return result.returncode
 
 
-def resolve_directory(f):
-    def wrapper(db, directory, **kwargs):
-        return f(db, str(Path(directory).resolve()), **kwargs)
-    
-    return wrapper
-
-
-@resolve_directory
 def up(
     db: str,
     directory: str,
@@ -160,7 +152,6 @@ def up(
     return _run_swellow(*args)
 
 
-@resolve_directory
 def down(
     db: str,
     directory: str,
@@ -213,7 +204,6 @@ def down(
     return _run_swellow(*args)
 
 
-@resolve_directory
 def peck(
     db: str,
     directory: str,
@@ -250,7 +240,6 @@ def peck(
     return _run_swellow(*args)
 
 
-@resolve_directory
 def snapshot(
     db: str,
     directory: str,
