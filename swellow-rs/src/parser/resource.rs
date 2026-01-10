@@ -215,14 +215,15 @@ impl ResourceCollection {
         &mut self,
         resource: Resource
     ) {
-        let statement = resource.statements.first().unwrap();
+        let is_create = resource.statements.first().is_some_and(|s| s == "CREATE");
 
-        let (name_before, mut statements_vec) = if statement == "CREATE" {
+        let (name_before, mut statements_vec) = if is_create {
             ("-1".to_string(), Vec::new())
         } else {
-            self.pop_first_match(resource.object_type, &resource.name_before)
-                .map(|res| (res.name_before, res.statements))
-                .unwrap_or((resource.name_before, Vec::new()))
+            match self.pop_first_match(resource.object_type, &resource.name_before) {
+                Some(res) => (res.name_before, res.statements),
+                None => (resource.name_before, Vec::new()),
+            }
         };
 
         statements_vec.extend(resource.statements);
