@@ -450,7 +450,7 @@ impl DbEngine for SparkEngine {
             // 4: For each table, get CREATE statement
             for table in table_names {
                 let stmt = self.generate_create_table_statement(&db, &table).await?;
-                snapshot_string = format!("{snapshot_string}CREATE DATABASE {stmt:?};\n\n");
+                snapshot_string = format!("{snapshot_string}{stmt};\n\n");
             }
         }
 
