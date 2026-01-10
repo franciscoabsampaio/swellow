@@ -165,13 +165,13 @@ pub async fn migrate(
 }
 
 /// Takes a snapshot of the current database schema and stores it as a new migration.
-pub fn snapshot(
+pub async fn snapshot(
     backend: &mut db::EngineBackend,
     migration_dir: &str
 ) -> Result<(), SwellowError> {
     tracing::info!("Taking database snapshot...");
 
-    let output = backend.snapshot()?;
+    let output = backend.snapshot().await?;
 
     // Store to SQL file with the latest possible version.
     // Get latest version.

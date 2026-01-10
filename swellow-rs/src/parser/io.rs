@@ -87,7 +87,7 @@ pub fn collect_versions_from_directory(
         })
         .collect::<Result<BTreeMap<i64, PathBuf>, ParseError>>()?;
 
-    if versions.is_empty() {
+    if versions.is_empty() && raise_if_empty {
         return Err(ParseError { kind: ParseErrorKind::NoMigrationsInRange(path.to_path_buf(), from_version_id, to_version_id) })
     }
     

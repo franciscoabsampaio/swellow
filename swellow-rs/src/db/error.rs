@@ -29,11 +29,14 @@ pub enum EngineErrorKind {
         expected: &'static str,
         found: DataType,
     },
+    Fmt(std::fmt::Error),
     LockConflict,
-    PGDump(Vec<u8>),
+    PGDump(String),
     Process{ source: std::io::Error, cmd: String },
     Spark(spark_connect::SparkError),
     SQLX(sqlx::Error),
+    TransactionNotStarted,
+    Utf8(std::string::FromUtf8Error),
 }
 
 impl fmt::Display for EngineErrorKind {
@@ -42,11 +45,14 @@ impl fmt::Display for EngineErrorKind {
             Self::ColumnTypeMismatch { column_index, expected, found } => {
                 write!(f, "Column {} has mismatched type: expected {}, found {:?}", column_index, expected, found)
             },
+            Self::Fmt(e) => write!(f, "Formatting error: {e}"),
             Self::LockConflict => write!(f, "Lock acquisition failed - lock record is taken"),
-            Self::PGDump(stderr) => write!(f, "pg_dump failed: '{stderr:?}'"),
+            Self::PGDump(stderr) => write!(f, "pg_dump failed: '{stderr}'"),
             Self::Process{cmd, .. } => write!(f, "Failed to run a command: '{cmd}'"),
             Self::SQLX(e) => write!(f, "{e}"),
-            Self::Spark(e) => write!(f, "{e}"),
+            Self::Spark(e) => write!(f, "1{e}"),
+            Self::TransactionNotStarted => write!(f, "Transaction has not been started"),
+            Self::Utf8(e) => write!(f, "UTF-8 conversion error: {e}"),
         }
     }
 }
@@ -60,6 +66,12 @@ impl Error for EngineErrorKind {
 			_ => None,
 		}
 	}
+}
+
+impl From<std::fmt::Error> for EngineError {
+    fn from(error: std::fmt::Error) -> Self {
+        EngineError { kind: EngineErrorKind::Fmt(error) }
+    }
 }
 
 impl From<sqlx::Error> for EngineError {
@@ -77,7 +89,7 @@ impl From<spark_connect::SparkError> for EngineError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{io, error::Error};
+    use std::{error::Error, io};
     use arrow::datatypes::DataType;
     use sqlx;
 
@@ -93,7 +105,7 @@ mod tests {
                 "Column 1 has mismatched type",
             ),
             (EngineErrorKind::LockConflict, "Lock acquisition failed"),
-            (EngineErrorKind::PGDump(vec![1, 2, 3]), "pg_dump failed"),
+            (EngineErrorKind::PGDump("Big mistake".to_string()), "pg_dump failed"),
             (
                 EngineErrorKind::SQLX(sqlx::Error::RowNotFound),
                 "sqlx::Error",

@@ -149,11 +149,11 @@ impl EngineBackend {
         }
     }
 
-    pub fn snapshot(&mut self) -> Result<Vec<u8>, EngineError> {
+    pub async fn snapshot(&mut self) -> Result<String, EngineError> {
         match self {
-            EngineBackend::Postgres(engine) => engine.snapshot(),
-            EngineBackend::SparkDelta(engine) => engine.snapshot(),
-            EngineBackend::SparkIceberg(engine) => engine.snapshot(),
+            EngineBackend::Postgres(engine) => engine.snapshot().await,
+            EngineBackend::SparkDelta(engine) => engine.snapshot().await,
+            EngineBackend::SparkIceberg(engine) => engine.snapshot().await,
         }
     }
 }
@@ -178,5 +178,5 @@ pub trait DbEngine {
     async fn update_record(&mut self, status: &str, version_id: i64) -> Result<(), EngineError>;
     async fn rollback(&mut self) -> Result<(), EngineError>;
     async fn commit(&mut self) -> Result<(), EngineError>;
-    fn snapshot(&mut self) -> Result<Vec<u8>, EngineError>;
+    async fn snapshot(&mut self) -> Result<String, EngineError>;
 }

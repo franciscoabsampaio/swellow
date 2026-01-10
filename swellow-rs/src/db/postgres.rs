@@ -195,7 +195,7 @@ impl DbEngine for PostgresEngine {
         Ok(())
     }
 
-    fn snapshot(&mut self) -> Result<Vec<u8>, EngineError> {
+    async fn snapshot(&mut self) -> Result<String, EngineError> {
         // Check if pg_dump is installed
         if process::Command::new("pg_dump").arg("--version").output()
             .is_err() {
@@ -211,11 +211,19 @@ impl DbEngine for PostgresEngine {
             .map_err(|source| {
                 EngineError { kind: EngineErrorKind::Process { source, cmd: "pg_dump --schema-only --no-owner --no-privileges".to_string() }}
             })?;
-        
+
         if output.status.success() {
-            Ok(output.stdout)
+            let stdout = String::from_utf8(output.stdout)
+                .map_err(|e| EngineError { kind: EngineErrorKind::Utf8(e) })?;
+
+            Ok(stdout)
         } else {
-            Err(EngineError { kind: EngineErrorKind::PGDump(output.stderr)})
+            let stderr = String::from_utf8(output.stderr)
+                .map_err(|e| EngineError { kind: EngineErrorKind::Utf8(e) })?;
+
+            Err(EngineError {
+                kind: EngineErrorKind::PGDump(stderr),
+            })
         }
     }
 }

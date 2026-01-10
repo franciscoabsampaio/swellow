@@ -2,9 +2,72 @@ use crate::db::{EngineError, error::EngineErrorKind};
 
 use crate::db::DbEngine;
 use arrow;
-use arrow::array::{Array, Int64Array, RecordBatch};
+use arrow::array::{Array, Int64Array, ListArray, MapArray, RecordBatch, StringArray, StructArray};
 use arrow::datatypes::DataType;
 use spark_connect as spark;
+use std::fmt::Write;
+use std::vec;
+
+
+/// Generic helper to downcast a column and return a Result with EngineError if type mismatch
+fn get_column<'a, T: Array + 'static>(
+    batch: &'a arrow::record_batch::RecordBatch,
+    column_index: usize,
+    expected: &'static str,
+) -> Result<&'a T, EngineError> {
+    batch
+        .column(column_index)
+        .as_any()
+        .downcast_ref::<T>()
+        .ok_or_else(move || EngineError {
+            kind: EngineErrorKind::ColumnTypeMismatch {
+                column_index,
+                expected,
+                found: batch.schema().field(column_index).data_type().clone(),
+            },
+        })
+}
+
+
+/// Helper: Parses the "DESCRIBE TABLE" output to build column definitions
+/// Input batch columns: [col_name, data_type, comment]
+fn build_schema_string(batch: &RecordBatch) -> Result<String, EngineError> {
+    let col_names = get_column::<StringArray>(
+        batch, 0, "StringArray"
+    )?;
+    let data_types = get_column::<StringArray>(
+        batch, 0, "StringArray"
+    )?;
+    let comments = get_column::<StringArray>(
+        batch, 0, "StringArray"
+    )?;
+
+    let mut schema_str = String::from("(");
+
+    // Iterate through each row to build each column's definition
+    for i in 0..batch.num_rows() {
+        if i > 0 {
+            schema_str.push_str(", ");
+        }
+
+        let name = col_names.value(i);
+        let dtype = data_types.value(i);
+        
+        // Basic format: "col_name data_type"
+        write!(&mut schema_str, "{} {}", name, dtype)?;
+
+        // Add comment if it exists and is not null
+        if comments.is_valid(i) {
+            let comment = comments.value(i);
+            if !comment.is_empty() {
+                write!(&mut schema_str, " COMMENT '{}'", comment);
+            }
+        }
+    }
+
+    schema_str.push(')');
+    Ok(schema_str)
+}
 
 
 /// Catalog type for ODBC engines
@@ -31,21 +94,120 @@ impl SparkEngine {
         })
     }
 
+    fn using_clause(&self) -> &str {
+        match self.catalog {
+            SparkCatalog::Delta => "delta",
+            SparkCatalog::Iceberg => "iceberg",
+        }
+    }
+
     async fn sql(&mut self, sql: &str) -> Result<Vec<RecordBatch>, EngineError> {
         Ok(self.session.query(sql).execute().await?)
     }
+
+    async fn fetch_vec_of_strings(&mut self, sql: &str, column_index: usize) -> Result<Vec<String>, EngineError> {
+        let batches: Vec<RecordBatch> = self.sql(sql).await?;
+
+        let mut vec_of_strings: Vec<String> = vec![];
+
+        for batch in &batches {
+            let column = get_column::<StringArray>(
+                batch, column_index, "StringArray"
+            )?
+                .iter()
+                .flatten()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>();
+            
+            vec_of_strings.extend(column);
+        }
+
+        Ok(vec_of_strings)
+    }
+
+    pub async fn generate_create_table_statement(
+        &mut self,
+        db: &str,
+        table: &str,
+    ) -> Result<String, EngineError> {
+        // 0. Fetch DESCRIBE TABLE and DESCRIBE DETAIL info from Spark
+        let describe_table_batch = &self.sql(
+            &format!("DESCRIBE TABLE {db}.{table}")
+        ).await?[0];
+        let describe_detail_batch = &self.sql(
+            &format!("DESCRIBE DETAIL {db}.{table}")
+        ).await?[0];
+
+        // 1. If we have a schema batch, format it (e.g., "(id int, name string)")
+        // Otherwise, we leave it empty (Spark will infer schema from Location)
+        let schema_def = build_schema_string(&describe_table_batch)?;
+
+        // 2. Parse DESCRIBE DETAIL output for table properties
+        let table_name = get_column::<StringArray>(
+            describe_detail_batch, 2, "StringArray",
+        )?.value(0);
+        let location = get_column::<StringArray>(
+            describe_detail_batch, 4, "StringArray",
+        )?.value(0);
+        let partition_columns_array = get_column::<ListArray>(
+            describe_detail_batch, 7, "ListArray",
+        )?.value(0);
+        let properties_array = get_column::<MapArray>(
+            describe_detail_batch, 11, "MapArray",
+        )?.value(0);
+
+        // Parsing Partitions
+        let partitions: Vec<String> = match partition_columns_array
+            .as_any()
+            .downcast_ref::<StringArray>() {
+                Some(arr) => arr
+                    .iter()
+                    .filter_map(|opt| opt.map(|s| s.to_string()))
+                    .collect(),
+                None => vec![],
+            };
+
+        // Parsing Properties
+        let mut tbl_properties = Vec::new();
+        let map = properties_array.as_any()
+            .downcast_ref::<StructArray>();
+        let keys = get_column::<StringArray>(
+            describe_detail_batch, 0, "StringArray",
+        )?;
+        let values = get_column::<StringArray>(
+            describe_detail_batch, 1, "StringArray",
+        )?;
+        
+        if let Some(map) = map {
+            for i in 0..map.len() {
+                if keys.is_valid(i) && values.is_valid(i) {
+                    tbl_properties.push(format!("'{}'='{}'", keys.value(i), values.value(i)));
+                }
+            }
+        }
+
+        // --- Updated Statement Construction ---
+        // Injects `schema_def` between table name and USING DELTA
+        let mut stmt = format!(
+            "CREATE TABLE {} {} USING {} LOCATION '{}'", 
+            table_name, schema_def, self.using_clause(), location
+        );
+
+        if !partitions.is_empty() {
+            stmt.push_str(&format!(" PARTITIONED BY ({})", partitions.join(", ")));
+        }
+        if !tbl_properties.is_empty() {
+            stmt.push_str(&format!(" TBLPROPERTIES ({})", tbl_properties.join(", ")));
+        }
+        
+        Ok(stmt)
+    }
+
 }
 
 
 impl DbEngine for SparkEngine {
     async fn ensure_table(&self) -> Result<(), EngineError> {
-        let catalog = self.catalog;
-        
-        let using_clause = match catalog {
-            SparkCatalog::Delta => "DELTA",
-            SparkCatalog::Iceberg => "ICEBERG",
-        };
-
         let sql = format!(r#"
             CREATE TABLE IF NOT EXISTS swellow_records (
                 version_id BIGINT,
@@ -57,8 +219,8 @@ impl DbEngine for SparkEngine {
                 dtm_created_at TIMESTAMP,
                 dtm_updated_at TIMESTAMP
             )
-            USING {using_clause};
-        "#);
+            USING {};
+        "#, self.using_clause());
 
         self.session.query(&sql).execute().await?;
 
@@ -268,7 +430,30 @@ impl DbEngine for SparkEngine {
         Ok(())
     }
 
-    fn snapshot(&mut self) -> Result<Vec<u8>, EngineError> {
-        Ok(vec![])
+    async fn snapshot(&mut self) -> Result<String, EngineError> {
+        let mut snapshot_string: String = String::new();
+
+        // 1: Get all databases
+        let db_names: Vec<String> = self.fetch_vec_of_strings("SHOW DATABASES", 0).await?;
+
+        // 2: Iterate over databases
+        for db in db_names {
+            // Add CREATE DATABASE statement
+            snapshot_string = format!("{snapshot_string}CREATE DATABASE {db};\n\n");
+
+            // 3. Get tables in this database
+            let table_names: Vec<String> = self.fetch_vec_of_strings(
+                // Get the second column which contains table names
+                &format!("SHOW TABLES IN {db}"), 1
+            ).await?;
+
+            // 4: For each table, get CREATE statement
+            for table in table_names {
+                let stmt = self.generate_create_table_statement(&db, &table).await?;
+                snapshot_string = format!("{snapshot_string}CREATE DATABASE {stmt:?};\n\n");
+            }
+        }
+
+        Ok(snapshot_string)
     }
 }
