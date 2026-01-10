@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import platform
 import subprocess
+import sys
 
 
 _parse_verbosity = lambda verbose: "" if verbose == 0 else ("-vv" if verbose > 1 else "-v")
@@ -139,7 +140,7 @@ def up(
     if json:
         args.append("--json")
 
-    args.append("up")
+    args.append(sys._getframe().f_code.co_name)
     
     if current_version_id is not None:
         args += ["--current-version-id", str(current_version_id)]
@@ -191,7 +192,7 @@ def down(
     if json:
         args.append("--json")
 
-    args.append("down")
+    args.append(sys._getframe().f_code.co_name)
 
     if current_version_id is not None:
         args += ["--current-version-id", str(current_version_id)]
@@ -235,7 +236,7 @@ def peck(
     if json:
         args.append("--json")
 
-    args.append("up")
+    args.append(sys._getframe().f_code.co_name)
     
     return _run_swellow(*args, capture_output=json, parse_error=json)
 
@@ -271,6 +272,6 @@ def snapshot(
     if json:
         args.append("--json")
 
-    args.append("snapshot")
+    args.append(sys._getframe().f_code.co_name)
 
     return _run_swellow(*args, capture_output=json, parse_error=json)
