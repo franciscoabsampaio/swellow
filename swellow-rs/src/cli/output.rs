@@ -39,6 +39,7 @@ pub enum SwellowErrorJson {
     FileNotFound { message: String },
     Io { message: String },
     Parser { message: String },
+    Tracing { message: String },
     Version { message: String },
 }
 
@@ -64,6 +65,7 @@ impl From<&SwellowError> for SwellowErrorJson {
                 ParseErrorKind::Statement(_) |
                 ParseErrorKind::Tokens(_) => Self::Parser { message: stderr },
             }
+            SwellowErrorKind::SetGlobalDefault(_) => Self::Tracing { message: stderr }
         }
     }
 }

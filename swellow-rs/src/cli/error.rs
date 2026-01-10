@@ -3,6 +3,7 @@ use crate::{cli::Engine, db::EngineError, parser::ParseError};
 use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
+use tracing::subscriber::SetGlobalDefaultError;
 
 
 #[derive(Debug)]
@@ -30,6 +31,7 @@ pub enum SwellowErrorKind {
     IoDirectoryCreate { source: std::io::Error, path: PathBuf},
     IoFileWrite { source: std::io::Error, path: PathBuf},
     Parse(ParseError),
+    SetGlobalDefault(SetGlobalDefaultError),
 }
 
 impl fmt::Display for SwellowErrorKind {
@@ -40,7 +42,8 @@ impl fmt::Display for SwellowErrorKind {
             Self::InvalidVersionInterval(from, to) => write!(f, "Invalid version interval: from ({from}) > to ({to})"),
             Self::IoDirectoryCreate { path, .. } => write!(f, "Failed to create directory: '{path:?}'"),
             Self::IoFileWrite { path, .. } => write!(f, "Failed to write to file: '{path:?}'"),
-            Self::Parse(error) => write!(f, "{}", error.kind)
+            Self::Parse(error) => write!(f, "{}", error.kind),
+            Self::SetGlobalDefault(error) => write!(f, "Failed to set global default subscriber: {}", error),
         }
         
     }
@@ -61,6 +64,12 @@ impl Error for SwellowErrorKind {
 impl From<EngineError> for SwellowError {
     fn from(error: EngineError) -> Self {
         SwellowError { kind: SwellowErrorKind::Engine(error) }
+    }
+}
+
+impl From<SetGlobalDefaultError> for SwellowError {
+    fn from(error: SetGlobalDefaultError) -> Self {
+        SwellowError { kind: SwellowErrorKind::SetGlobalDefault(error) }
     }
 }
 

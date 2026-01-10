@@ -1,15 +1,16 @@
+use crate::SwellowError;
 use crate::migration::{MigrationCollection, MigrationDirection};
 use crate::parser::Resource;
 use std::fmt::Write;
 
 
-pub fn setup_logging(verbose: u8, quiet: bool, json: bool) {
+pub fn setup_logging(verbose: u8, quiet: bool, json: bool) -> Result<(), SwellowError> {
     if json {
         // Mute all logging if JSON output is enabled
         // TODO: Log to a file instead or always
         tracing::subscriber::set_global_default(tracing::subscriber::NoSubscriber::default())
             .expect("Setting no-op subscriber failed");
-        return;
+        return Ok(());
     }
 
     let level = if quiet {
@@ -24,8 +25,9 @@ pub fn setup_logging(verbose: u8, quiet: bool, json: bool) {
         .with_max_level(level)
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("Setting default subscriber failed!");
+    tracing::subscriber::set_global_default(subscriber)?;
+
+    Ok(())
 }
 
 
