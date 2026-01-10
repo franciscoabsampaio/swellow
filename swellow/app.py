@@ -80,7 +80,7 @@ def _parse_error(stdout: str, stderr: str):
         raise SwellowError(message)
 
 
-def _run_swellow(*args, capture_output=True) -> int:
+def _run_swellow(*args, capture_output=True, parse_error=True) -> int:
     """
     Run the swellow Rust binary with args, parse output, and raise custom errors.
     Returns exit code if successful, otherwise raises SwellowError or subclass.
@@ -94,7 +94,7 @@ def _run_swellow(*args, capture_output=True) -> int:
     stderr = result.stderr or ""
     
     # Handle errors
-    if result.returncode != 0:
+    if result.returncode != 0 and parse_error:
         _parse_error(stdout, stderr)
     
     return result.returncode

@@ -3,36 +3,15 @@ import argparse
 import sys
 
 
-class HelpFormatterRedirect(argparse.HelpFormatter):
-    """
-    Overrides the default formatter by a call to the Rust binary.
-    """
-    def __init__(
-        self,
-        prog,
-        indent_increment=2,
-        max_help_position=24,
-        width=None
-    ):
-        super().__init__(prog, indent_increment, max_help_position, width)
-
-    def format_help(self):
-        """
-        Overrides the main help method to extract argument data only.
-        """
-        from .app import _run_swellow
-        try:
-            _run_swellow(*sys.argv[1:], capture_output=False)
-        except SwellowError as e:
-            print(e, file=sys.stderr)
-        return ""
-
-
 def main():
-    parser = argparse.ArgumentParser(
-        prog="swellow",
-        formatter_class=HelpFormatterRedirect
-    )
+    # Override help to delegate to the Rust CLI
+    if len(sys.argv) == 1 or any(arg in ("-h", "--help", "help") for arg in sys.argv[1:]):
+        # Delegate to the Rust CLI
+        from .app import _run_swellow
+        _run_swellow(*sys.argv[1:], capture_output=False, parse_error=False)
+        sys.exit(0)
+
+    parser = argparse.ArgumentParser(prog="swellow")
 
     parser.add_argument("--db", required=True)
     parser.add_argument("--dir", required=True)
