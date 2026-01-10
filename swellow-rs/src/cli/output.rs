@@ -50,6 +50,7 @@ impl From<&SwellowError> for SwellowErrorJson {
         match &error.kind {
             SwellowErrorKind::DryRunUnsupportedEngine(_) => Self::Engine { message: stderr },
             SwellowErrorKind::Engine(_) => Self::Engine { message: stderr },
+            SwellowErrorKind::Fmt(_) => Self::Io { message: stderr },
             SwellowErrorKind::InvalidVersionInterval(..) => Self::Version { message: stderr },
             SwellowErrorKind::IoDirectoryCreate {..} | SwellowErrorKind::IoFileWrite {..} => {
                 Self::Io { message: stderr }

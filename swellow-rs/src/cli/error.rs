@@ -27,6 +27,7 @@ impl Error for SwellowError {
 pub enum SwellowErrorKind {
     DryRunUnsupportedEngine(Engine),
     Engine(EngineError),
+    Fmt(std::fmt::Error),
     InvalidVersionInterval(i64, i64),
     IoDirectoryCreate { source: std::io::Error, path: PathBuf},
     IoFileWrite { source: std::io::Error, path: PathBuf},
@@ -39,6 +40,7 @@ impl fmt::Display for SwellowErrorKind {
         match self {
             Self::DryRunUnsupportedEngine(engine) => write!(f, "Dry run is not supported for engine: {engine:?}"),
             Self::Engine(error) => write!(f, "{}", error.kind),
+            Self::Fmt(e) => write!(f, "Formatting error: {e}"),
             Self::InvalidVersionInterval(from, to) => write!(f, "Invalid version interval: from ({from}) > to ({to})"),
             Self::IoDirectoryCreate { path, .. } => write!(f, "Failed to create directory: '{path:?}'"),
             Self::IoFileWrite { path, .. } => write!(f, "Failed to write to file: '{path:?}'"),
@@ -67,15 +69,21 @@ impl From<EngineError> for SwellowError {
     }
 }
 
-impl From<SetGlobalDefaultError> for SwellowError {
-    fn from(error: SetGlobalDefaultError) -> Self {
-        SwellowError { kind: SwellowErrorKind::SetGlobalDefault(error) }
-    }
-}
-
 impl From<ParseError> for SwellowError {
     fn from(error: ParseError) -> Self {
         SwellowError { kind: SwellowErrorKind::Parse(error) }
+    }
+}
+
+impl From<std::fmt::Error> for SwellowError {
+    fn from(error: std::fmt::Error) -> Self {
+        SwellowError { kind: SwellowErrorKind::Fmt(error) }
+    }
+}
+
+impl From<SetGlobalDefaultError> for SwellowError {
+    fn from(error: SetGlobalDefaultError) -> Self {
+        SwellowError { kind: SwellowErrorKind::SetGlobalDefault(error) }
     }
 }
 

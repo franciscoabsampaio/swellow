@@ -33,7 +33,7 @@ pub fn setup_logging(verbose: u8, quiet: bool, json: bool) -> Result<(), Swellow
 pub fn show_migration_changes(
     migrations: &MigrationCollection,
     direction: &MigrationDirection
-) -> Result<(), std::fmt::Error> {
+) -> Result<(), SwellowError> {
     let operation = direction.noun();
     let mut output = "Generating migration plan...\n--- Migration plan ---".to_string();
 

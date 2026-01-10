@@ -72,7 +72,7 @@ async fn plan(
         to_version,
     )?;
 
-    ux::show_migration_changes(&migrations, direction);
+    ux::show_migration_changes(&migrations, direction)?;
 
     Ok(migrations)
 }
