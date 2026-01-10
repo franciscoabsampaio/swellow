@@ -106,11 +106,10 @@ impl StatementCollection {
         }
 
         // Add the last statement if it doesn't end with a semicolon
-        if !current_tokens.is_empty() {
-            if let Ok(stmt) = ActionableStatement::new(self.dialect, current_tokens) {
+        if !current_tokens.is_empty() 
+            && let Ok(stmt) = ActionableStatement::new(self.dialect, current_tokens) {
                 self.inner.push(stmt);
             }
-        }
 
         Ok(self.clone())
     }
