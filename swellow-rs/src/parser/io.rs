@@ -27,7 +27,8 @@ pub fn parse_id_from_version_name(version_name: &str) -> Result<i64, ParseError>
 pub fn collect_versions_from_directory(
     directory: &str,
     from_version_id: i64,
-    to_version_id: i64
+    to_version_id: i64,
+    raise_if_empty: bool,
 ) -> Result<BTreeMap<i64, PathBuf>, ParseError> {
     let path = Path::new(directory);
     if !path.is_dir() {

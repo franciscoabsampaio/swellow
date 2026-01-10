@@ -96,7 +96,7 @@ impl MigrationCollection {
         to_version_id: i64,
     ) -> Result<Self, ParseError> {
         let versions = collect_versions_from_directory(
-            directory, from_version_id, to_version_id
+            directory, from_version_id, to_version_id, true
         )?;
 
         let migrations = versions

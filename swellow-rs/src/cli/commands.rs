@@ -178,7 +178,8 @@ pub fn snapshot(
     let new_version = parser::collect_versions_from_directory(
         migration_dir,
         i64::MIN,
-        i64::MAX
+        i64::MAX,
+        false
     )?
         .iter()
         .fold(0, |acc, (v, _)| acc.max(*v) + 1);
