@@ -8,8 +8,7 @@ pub fn setup_logging(verbose: u8, quiet: bool, json: bool) -> Result<(), Swellow
     if json {
         // Mute all logging if JSON output is enabled
         // TODO: Log to a file instead or always
-        tracing::subscriber::set_global_default(tracing::subscriber::NoSubscriber::default())
-            .expect("Setting no-op subscriber failed");
+        tracing::subscriber::set_global_default(tracing::subscriber::NoSubscriber::default())?;
         return Ok(());
     }
 
