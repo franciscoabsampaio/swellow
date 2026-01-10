@@ -149,7 +149,7 @@ def up(
         args.append("--plan")
     if dry_run:
         args.append("--dry-run")
-    return _run_swellow(*args)
+    return _run_swellow(*args, capture_output=json, parse_error=json)
 
 
 def down(
@@ -201,7 +201,7 @@ def down(
         args.append("--plan")
     if dry_run:
         args.append("--dry-run")
-    return _run_swellow(*args)
+    return _run_swellow(*args, capture_output=json, parse_error=json)
 
 
 def peck(
@@ -237,7 +237,7 @@ def peck(
 
     args.append("up")
     
-    return _run_swellow(*args)
+    return _run_swellow(*args, capture_output=json, parse_error=json)
 
 
 def snapshot(
@@ -271,4 +271,6 @@ def snapshot(
     if json:
         args.append("--json")
 
-    return _run_swellow(*args)
+    args.append("snapshot")
+
+    return _run_swellow(*args, capture_output=json, parse_error=json)
