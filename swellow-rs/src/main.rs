@@ -24,6 +24,7 @@ async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value
             status: SwellowStatus::Error,
             data: None,
             error: Some((&e).into()),
+            timestamp: chrono::Utc::now(),
         }
     };
 
@@ -63,7 +64,7 @@ async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value
             commands::snapshot(
                 &mut backend,
                 &migration_directory
-            )
+            ).await
         ),
     };
 

@@ -1,20 +1,33 @@
+// Example JSON output produced by Swellow:
+//
+// Success case:
 // {
-//   "status": "ok",
 //   "command": "plan",
-//   "message": "Migration plan generated",
-//   "warnings": [
-//     {"code": "destructive_drop", "message": "Table 'users' will be dropped"},
-//     {"code": "potential_data_loss", "message": "Altering column type from INT to TEXT"}
-//   ],
-//   "data": {
-//     "plan": [
-//       {"version": 5, "action": "create_table", "table": "users"},
-//       {"version": 6, "action": "alter_column", "table": "users", "column": "id"}
-//     ]
-//   },
-//   "timestamp": "2025-10-17T15:52:12Z"
+//   "status": "success",
+//   "data": null,
+//   "error": null,
+//   "timestamp": "2025-01-10T15:52:12Z"
 // }
+//
+// Error case:
+// {
+//   "command": "plan",
+//   "status": "error",
+//   "data": null,
+//   "error": {
+//     "type": "version",
+//     "message": "Invalid version interval: start=5, end=3"
+//   },
+//   "timestamp": "2025-01-10T15:52:12Z"
+// }
+//
+// Notes:
+// - `status` is either `"success"` or `"error"`
+// - `data` is optional and command-specific
+// - `error` is a structured object with a `type` and human-readable `message`
+// - `timestamp` is an RFC 3339 UTC timestamp indicating when the command completed
 use crate::{db::EngineError, error::{SwellowError, SwellowErrorKind}, parser::ParseErrorKind};
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -72,6 +85,7 @@ pub struct SwellowOutput<T: Serialize> {
     pub status: SwellowStatus,
     pub data: Option<T>,
     pub error: Option<SwellowErrorJson>,
+    pub timestamp: DateTime<Utc>,
 }
 
 impl SwellowOutput<Value> {
@@ -79,18 +93,22 @@ impl SwellowOutput<Value> {
         command: impl Into<String>,
         result: Result<(), SwellowError>,
     ) -> Self {
+        let timestamp = chrono::Utc::now();
+
         match result {
             Ok(_) => Self {
                 command: command.into(),
                 status: SwellowStatus::Success,
                 data: None,
                 error: None,
+                timestamp,
             },
             Err(e) => Self {
                 command: command.into(),
                 status: SwellowStatus::Error,
                 data: None,
                 error: Some((&e).into()),
+                timestamp,
             },
         }
     }
@@ -113,6 +131,7 @@ mod tests {
             status: SwellowStatus::Error,
             data: None,
             error: Some((&err).into()),
+            timestamp: Utc::now(),
         };
 
         let s = serde_json::to_string(&output).unwrap();

@@ -14,6 +14,7 @@ path = "src/main.rs"
 arrow = { workspace = true }
 async-trait = "0.1.89"
 clap = { version = "4.5", features = ["derive", "env"] }
+chrono = { version = "0.4.42", features = ["serde"] }
 odbc-api = "19.0.2"
 phf = { version = "0.13.1", features = ["macros"] }
 # pyo3 = { version = "0.26", features = ["extension-module", "experimental-async"] }
