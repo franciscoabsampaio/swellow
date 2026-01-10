@@ -32,7 +32,7 @@ pub fn setup_logging(verbose: u8, quiet: bool, json: bool) {
 pub fn show_migration_changes(
     migrations: &MigrationCollection,
     direction: &MigrationDirection
-) -> () {
+) -> Result<(), std::fmt::Error> {
     let operation = direction.noun();
     let mut output = "Generating migration plan...\n--- Migration plan ---".to_string();
 
@@ -47,7 +47,7 @@ pub fn show_migration_changes(
             version_id,
             migration.path.display(),
             resources,
-        ).unwrap();
+        )?;
 
         let mut destructive_found = false;
 
@@ -64,14 +64,14 @@ pub fn show_migration_changes(
                 // name_after,
                 object_type,
                 object_name,
-            ).unwrap();
+            )?;
 
             for stmt in statements {
                 writeln!(
                     &mut output,
                     "\t-> {}",
                     stmt,
-                ).unwrap();
+                )?;
                 
                 // Check for destructive statements
                 if stmt == "DROP" {
@@ -88,9 +88,11 @@ pub fn show_migration_changes(
                 "\n\tWARNING: {} {} contains destructive actions!",
                 operation,
                 version_id
-            ).unwrap();
+            )?;
         }
     }
 
     tracing::info!("{}\n--- End of migration plan ---", output);
+
+    Ok(())
 }
