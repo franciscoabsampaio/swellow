@@ -12,10 +12,20 @@ use serde_json::Value;
 
 
 async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value> {
+    let command_name = args.command.to_string();
+    
+    if let Err(e) = ux::setup_logging(args.verbose, args.quiet, args.json) {
+        return SwellowOutput {
+            command: "setup_logging".to_string(),
+            status: SwellowStatus::Error,
+            data: None,
+            error: Some((&e).into()),
+            timestamp: chrono::Utc::now(),
+        }
+    };
+
     let db_connection_string: String = args.db_connection_string.clone();
     let migration_directory: String = args.migration_directory.clone();
-
-    let command_name = args.command.to_string();
 
     let mut backend = match args.engine.into_backend(db_connection_string).await {
         Ok(b) => b,
@@ -97,8 +107,6 @@ async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value
 #[tokio::main]
 async fn main() {
     let args: cli::Cli = cli::Cli::parse();
-
-    ux::setup_logging(args.verbose, args.quiet, args.json);
 
     let result = run_command(&args).await;
 

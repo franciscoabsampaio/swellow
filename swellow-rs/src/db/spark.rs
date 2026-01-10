@@ -60,7 +60,7 @@ fn build_schema_string(batch: &RecordBatch) -> Result<String, EngineError> {
         if comments.is_valid(i) {
             let comment = comments.value(i);
             if !comment.is_empty() {
-                write!(&mut schema_str, " COMMENT '{}'", comment);
+                write!(&mut schema_str, " COMMENT '{}'", comment)?;
             }
         }
     }
