@@ -102,12 +102,24 @@ async fn main() {
 
     let result = run_command(&args).await;
 
+    // Serialize JSON safely
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        match serde_json::to_string_pretty(&result) {
+            Ok(json) => println!("{}", json),
+            Err(e) => {
+                tracing::error!("Failed to serialize output to JSON: {:?}", e);
+                std::process::exit(1);
+            }
+        }
     }
 
+    // Handle error output safely
     if let SwellowStatus::Error = result.status {
-        tracing::error!("'swellow {}' failed: {:?}", result.command, result.error.unwrap());
+        if let Some(err) = result.error {
+            tracing::error!("'swellow {}' failed: {:?}", result.command, err);
+        } else {
+            tracing::error!("'swellow {}' failed with unknown error", result.command);
+        }
         std::process::exit(1);
     }
 }
