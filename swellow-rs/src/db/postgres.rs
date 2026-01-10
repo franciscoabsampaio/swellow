@@ -94,11 +94,11 @@ impl DbEngine for PostgresEngine {
             .execute(tx.deref_mut())
             .await?;
 
-        return Ok(())
+        Ok(())
     }
 
     async fn release_lock(&mut self) -> Result<(), EngineError> {
-        return Ok(())
+        Ok(())
     }
 
     async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError> {
