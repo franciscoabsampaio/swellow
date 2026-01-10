@@ -26,7 +26,9 @@ impl PostgresEngine {
             self.tx = Some(txn);
         }
         
-        Ok(self.tx.as_mut().unwrap())
+        self.tx.as_mut().ok_or_else(|| EngineError {
+            kind: EngineErrorKind::TransactionNotStarted,
+        })
     }
 }
 

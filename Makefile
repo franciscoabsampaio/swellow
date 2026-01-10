@@ -1,3 +1,7 @@
+init:
+	git config core.hooksPath .githooks
+	chmod +x .githooks/pre-commit
+
 build:
 	cargo build
 	rm swellow/bin/swellow-linux-x86_64/swellow
