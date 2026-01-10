@@ -181,7 +181,7 @@ pub fn snapshot(
         i64::MAX
     )?
         .iter()
-        .fold(i64::MIN, |acc, (v, _)| acc.max(*v) + 1);
+        .fold(0, |acc, (v, _)| acc.max(*v) + 1);
 
     // Output snapshot SQL script to directory with updated version
     let new_version_directory = Path::new(migration_dir).join(format!("{}_snapshot", new_version));
