@@ -88,6 +88,7 @@ pub async fn migrate(
     flag_dry_run: bool,
     flag_ignore_locks: bool,
 ) -> Result<(), SwellowError> {
+    // Dry run is not supported for Spark engines
     if flag_dry_run && matches!(backend, db::EngineBackend::SparkDelta(_) | db::EngineBackend::SparkIceberg(_)) {
         return Err(SwellowError { kind: SwellowErrorKind::DryRunUnsupportedEngine(backend.engine()) });
     }
