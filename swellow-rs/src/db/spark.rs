@@ -181,14 +181,13 @@ impl SparkEngine {
         
         Ok(stmt)
     }
-
 }
 
 
 impl DbEngine for SparkEngine {
-    async fn ensure_table(&self) -> Result<(), EngineError> {
-        let sql = format!(r#"
-            CREATE TABLE IF NOT EXISTS swellow_records (
+    async fn ensure_table(&mut self) -> Result<(), EngineError> {
+        self.sql(&format!(r#"
+            CREATE TABLE IF NOT EXISTS swellow.records (
                 version_id BIGINT,
                 object_type STRING,
                 object_name_before STRING,
@@ -199,9 +198,7 @@ impl DbEngine for SparkEngine {
                 dtm_updated_at TIMESTAMP
             )
             USING {};
-        "#, self.using_clause());
-
-        self.session.query(&sql).execute().await?;
+        "#, self.using_clause())).await?;
 
         Ok(())
     }
@@ -249,7 +246,7 @@ impl DbEngine for SparkEngine {
     async fn acquire_lock(&mut self) -> Result<(), EngineError> {
         let query_select_lock = r#"
             SELECT *
-            FROM swellow_records
+            FROM swellow.records
             WHERE version_id = 0
                 AND object_type = 'LOCK'
                 AND object_name_before = 'LOCK'
@@ -262,7 +259,7 @@ impl DbEngine for SparkEngine {
         }
 
         self.session.query(r#"
-            INSERT INTO swellow_records (
+            INSERT INTO swellow.records (
                 version_id,
                 object_type,
                 object_name_before,
@@ -291,7 +288,7 @@ impl DbEngine for SparkEngine {
 
     async fn release_lock(&mut self) -> Result<(), EngineError> {
         self.session.query(r#"
-            DELETE FROM swellow_records
+            DELETE FROM swellow.records
             WHERE version_id = 0
                 AND object_type = 'LOCK'
                 AND object_name_before = 'LOCK'
@@ -305,7 +302,7 @@ impl DbEngine for SparkEngine {
 
     async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError> {
         self.session.query(r#"
-            UPDATE swellow_records
+            UPDATE swellow.records
             SET status='DISABLED'
             WHERE version_id > ?
         "#)
@@ -325,7 +322,7 @@ impl DbEngine for SparkEngine {
         checksum: &str
     ) -> Result<(), EngineError> {
         self.session.query(r#"
-            MERGE INTO swellow_records AS target
+            MERGE INTO swellow.records AS target
             USING (
                 SELECT
                     ? AS object_type,
@@ -373,7 +370,7 @@ impl DbEngine for SparkEngine {
 
     async fn update_record(&mut self, status: &str, version_id: i64) -> Result<(), EngineError> {
         self.session.query(r#"
-            UPDATE swellow_records
+            UPDATE swellow.records
             SET
                 status=?
             WHERE
@@ -414,7 +411,13 @@ impl DbEngine for SparkEngine {
 
             // 4: For each table, get CREATE statement
             for table in table_names {
-                let stmt = self.generate_create_table_statement(&db, &table).await?;
+                println!("{:?}", self.sql(
+                    &format!("SHOW CREATE TABLE {db}.{table}")
+                ).await?);
+                let stmt = match self.catalog {
+                    SparkCatalog::Delta => self.generate_create_table_statement(&db, &table).await?,
+                    SparkCatalog::Iceberg => "temp".to_string(),
+                };
                 snapshot_string = format!("{snapshot_string}{stmt};\n\n");
             }
         }

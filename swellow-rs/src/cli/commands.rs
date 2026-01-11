@@ -8,7 +8,7 @@ use std::path::Path;
 
 
 /// Ensures the database is initialized and the migration table exists.
-pub async fn peck(backend: &db::EngineBackend) -> Result<(), SwellowError> {
+pub async fn peck(backend: &mut db::EngineBackend) -> Result<(), SwellowError> {
     tracing::info!("Pecking database...");
     backend.ensure_table().await?;
     tracing::info!("Pecking successful 🐦");
@@ -28,7 +28,7 @@ async fn plan(
     let latest_version_from_records = backend
         .fetch_optional_i64(
             "SELECT MAX(version_id) AS version_id
-             FROM swellow_records
+             FROM swellow.records
              WHERE status IN ('APPLIED', 'TESTED')",
         )
         .await?
@@ -98,7 +98,7 @@ pub async fn migrate(
     tracing::info!("Beginning transaction...");
     backend.begin().await?;
 
-    // Acquire a lock on the swellow_records table
+    // Acquire a lock on the swellow.records table
     // To ensure no other migration process is underway.
     if flag_ignore_locks {
         tracing::warn!("⚠️ Ignoring locks: sequential execution of migrations is not guaranteed.");
@@ -116,7 +116,7 @@ pub async fn migrate(
     ).await?;
 
     if flag_plan {
-        tracing::info!("Planning complete - no migrations executed.");
+        tracing::info!("Planning complete - no migrations executed 🐦");
         return Ok(());
     }
 
@@ -156,10 +156,10 @@ pub async fn migrate(
 
     if flag_dry_run {
         backend.rollback().await?;
-        tracing::info!("Dry run completed - transaction successfully rolled back.");
+        tracing::info!("Dry run completed - transaction successfully rolled back 🐦");
     } else {
         backend.commit().await?;
-        tracing::info!("Migration completed - transaction successfully committed.");
+        tracing::info!("Migration completed - transaction successfully committed 🐦");
     }
 
     Ok(())

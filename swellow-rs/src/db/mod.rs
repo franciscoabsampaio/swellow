@@ -26,7 +26,7 @@ impl EngineBackend {
         }
     }
 
-    pub async fn ensure_table(&self) -> Result<(), EngineError> {
+    pub async fn ensure_table(&mut self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.ensure_table().await,
             EngineBackend::SparkDelta(engine) => engine.ensure_table().await,
@@ -161,7 +161,7 @@ impl EngineBackend {
 
 
 pub trait DbEngine {
-    async fn ensure_table(&self) -> Result<(), EngineError>;
+    async fn ensure_table(&mut self) -> Result<(), EngineError>;
     async fn begin(&mut self) -> Result<(), EngineError>;
     async fn execute(&mut self, sql: &str) -> Result<(), EngineError>;
     async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError>;

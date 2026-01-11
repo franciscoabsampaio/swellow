@@ -35,15 +35,19 @@ impl PostgresEngine {
 
 // #[async_trait::async_trait]
 impl DbEngine for PostgresEngine {
-    async fn ensure_table(&self) -> Result<(), EngineError> {
+    async fn ensure_table(&mut self) -> Result<(), EngineError> {
         let pool = PgPool::connect(&self.conn_str).await?;
+        
+        sqlx::query("CREATE SCHEMA swellow;")
+            .execute(&pool)
+            .await?;
         
         sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
             .execute(&pool)
             .await?;
         
         sqlx::query(r#"
-            CREATE TABLE IF NOT EXISTS swellow_records (
+            CREATE TABLE IF NOT EXISTS swellow.records (
                 oid OID,
                 version_id BIGINT NOT NULL,
                 object_type TEXT NOT NULL,
@@ -90,7 +94,7 @@ impl DbEngine for PostgresEngine {
     async fn acquire_lock(&mut self) -> Result<(), EngineError> {
         let tx = self.transaction().await?;
 
-        sqlx::query("LOCK TABLE swellow_records IN ACCESS EXCLUSIVE MODE;")
+        sqlx::query("LOCK TABLE swellow.records IN ACCESS EXCLUSIVE MODE;")
             .execute(tx.deref_mut())
             .await?;
 
@@ -106,7 +110,7 @@ impl DbEngine for PostgresEngine {
 
         sqlx::query(
             r#"
-            UPDATE swellow_records
+            UPDATE swellow.records
             SET status='DISABLED'
             WHERE version_id > $1
             "#,
@@ -129,7 +133,7 @@ impl DbEngine for PostgresEngine {
 
         sqlx::query(
             r#"
-            INSERT INTO swellow_records(
+            INSERT INTO swellow.records(
                 object_type,
                 object_name_before,
                 object_name_after,
@@ -166,7 +170,7 @@ impl DbEngine for PostgresEngine {
 
         sqlx::query(
             r#"
-            UPDATE swellow_records
+            UPDATE swellow.records
             SET
                 status=$1
             WHERE

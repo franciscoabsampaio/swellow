@@ -41,7 +41,7 @@ async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value
     let mut output: SwellowOutput<Value> = match &args.command {
         cli::Commands::Peck { } => SwellowOutput::from_result(
             "peck",
-            commands::peck(&backend).await
+            commands::peck(&mut backend).await
         ),
         cli::Commands::Up { args } => SwellowOutput::from_result(
             "up",
