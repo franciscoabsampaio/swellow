@@ -1,3 +1,4 @@
+mod arrow_utils;
 mod error;
 mod spark;
 mod postgres;

@@ -1,6 +1,5 @@
-use crate::db::{EngineError, error::EngineErrorKind};
-
-use crate::db::DbEngine;
+use crate::db::{DbEngine, EngineError, error::EngineErrorKind};
+use crate::db::arrow_utils::get_column;
 use arrow;
 use arrow::array::{Array, Int64Array, ListArray, MapArray, RecordBatch, StringArray, StructArray};
 use arrow::datatypes::DataType;
@@ -9,37 +8,17 @@ use std::fmt::Write;
 use std::vec;
 
 
-/// Generic helper to downcast a column and return a Result with EngineError if type mismatch
-fn get_column<'a, T: Array + 'static>(
-    batch: &'a arrow::record_batch::RecordBatch,
-    column_index: usize,
-    expected: &'static str,
-) -> Result<&'a T, EngineError> {
-    batch
-        .column(column_index)
-        .as_any()
-        .downcast_ref::<T>()
-        .ok_or_else(move || EngineError {
-            kind: EngineErrorKind::ColumnTypeMismatch {
-                column_index,
-                expected,
-                found: batch.schema().field(column_index).data_type().clone(),
-            },
-        })
-}
-
-
 /// Helper: Parses the "DESCRIBE TABLE" output to build column definitions
 /// Input batch columns: [col_name, data_type, comment]
 fn build_schema_string(batch: &RecordBatch) -> Result<String, EngineError> {
     let col_names = get_column::<StringArray>(
-        batch, 0, "StringArray"
+        batch, 0, DataType::Utf8
     )?;
     let data_types = get_column::<StringArray>(
-        batch, 0, "StringArray"
+        batch, 0, DataType::Utf8
     )?;
     let comments = get_column::<StringArray>(
-        batch, 0, "StringArray"
+        batch, 0, DataType::Utf8
     )?;
 
     let mut schema_str = String::from("(");
@@ -112,7 +91,7 @@ impl SparkEngine {
 
         for batch in &batches {
             let column = get_column::<StringArray>(
-                batch, column_index, "StringArray"
+                batch, column_index, DataType::Utf8
             )?
                 .iter()
                 .flatten()
@@ -144,16 +123,16 @@ impl SparkEngine {
 
         // 2. Parse DESCRIBE DETAIL output for table properties
         let table_name = get_column::<StringArray>(
-            describe_detail_batch, 2, "StringArray",
+            describe_detail_batch, 2, DataType::Utf8,
         )?.value(0);
         let location = get_column::<StringArray>(
-            describe_detail_batch, 4, "StringArray",
+            describe_detail_batch, 4, DataType::Utf8,
         )?.value(0);
         let partition_columns_array = get_column::<ListArray>(
-            describe_detail_batch, 7, "ListArray",
+            describe_detail_batch, 7, DataType::Utf8,
         )?.value(0);
         let properties_array = get_column::<MapArray>(
-            describe_detail_batch, 11, "MapArray",
+            describe_detail_batch, 11, DataType::Utf8,
         )?.value(0);
 
         // Parsing Partitions
@@ -172,10 +151,10 @@ impl SparkEngine {
         let map = properties_array.as_any()
             .downcast_ref::<StructArray>();
         let keys = get_column::<StringArray>(
-            describe_detail_batch, 0, "StringArray",
+            describe_detail_batch, 0, DataType::Utf8,
         )?;
         let values = get_column::<StringArray>(
-            describe_detail_batch, 1, "StringArray",
+            describe_detail_batch, 1, DataType::Utf8,
         )?;
         
         if let Some(map) = map {
@@ -246,27 +225,13 @@ impl DbEngine for SparkEngine {
             None => return Ok(None),
         };
 
-        // Extract schema field safely
-        let schema = first_batch.schema();
-        let field = match schema.fields().get(0) {
-            Some(f) => f,
-            None => return Ok(None),
-        };
-
-        // Ensure the first column is actually Int64
-        if field.data_type() != &DataType::Int64 {
-            return Err(EngineError {
-                kind: EngineErrorKind::ColumnTypeMismatch {
-                    column_index: 0,
-                    expected: "Int64Array",
-                    found: field.data_type().clone(),
-                },
-            });
-        }
-
-        let Some(col) = first_batch.column(0).as_any().downcast_ref::<Int64Array>() else {
-            return Ok(None);
-        };
+        // Get the first column as Int64Array
+        // Raise error if type mismatch or column not found
+        let col = get_column::<Int64Array>(
+            first_batch,
+            0,
+            DataType::Int64
+        )?;
 
         // If the column is empty, return None
         if col.is_empty() {

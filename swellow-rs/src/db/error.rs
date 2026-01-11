@@ -24,9 +24,13 @@ impl Error for EngineError {
 
 #[derive(Debug)]
 pub enum EngineErrorKind {
+    ColumnIndexOutOfBounds {
+        column_index: usize,
+        num_columns: usize,
+    },
     ColumnTypeMismatch {
         column_index: usize,
-        expected: &'static str,
+        expected: DataType,
         found: DataType,
     },
     Fmt(std::fmt::Error),
@@ -42,8 +46,11 @@ pub enum EngineErrorKind {
 impl fmt::Display for EngineErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ColumnIndexOutOfBounds { column_index, num_columns } => {
+                write!(f, "Column index {column_index} is out of bounds (number of columns: {num_columns})")
+            },
             Self::ColumnTypeMismatch { column_index, expected, found } => {
-                write!(f, "Column {} has mismatched type: expected {}, found {:?}", column_index, expected, found)
+                write!(f, "Column {column_index} has mismatched type: expected {expected}, found {found}")
             },
             Self::Fmt(e) => write!(f, "Formatting error: {e}"),
             Self::LockConflict => write!(f, "Lock acquisition failed - lock record is taken"),
@@ -99,7 +106,7 @@ mod tests {
             (
                 EngineErrorKind::ColumnTypeMismatch {
                     column_index: 1,
-                    expected: "Int64",
+                    expected: DataType::Int64,
                     found: DataType::Utf8,
                 },
                 "Column 1 has mismatched type",
