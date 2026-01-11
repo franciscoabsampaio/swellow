@@ -11,3 +11,12 @@ build:
 test:
 	cargo test
 	pytest -vs
+
+pg:
+	docker run --name pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres
+
+spark-delta:
+	docker run --name spark-delta -p 15002:15002 -d franciscoabsampaio/spark-connect-server:delta
+
+spark-iceberg:
+	docker run --name spark-iceberg -p 15003:15002 -d franciscoabsampaio/spark-connect-server:iceberg
