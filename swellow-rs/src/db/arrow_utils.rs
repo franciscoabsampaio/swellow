@@ -3,6 +3,7 @@ use arrow::array::Array;
 use arrow::datatypes::DataType;
 
 
+/// Downcasts an Arrow array to the expected type, returning an error if the types do not match.
 pub fn downcast_column<'a, T: Array + 'static>(
     array: &'a dyn Array,
     column_index: usize,
@@ -22,6 +23,7 @@ pub fn downcast_column<'a, T: Array + 'static>(
 }
 
 
+/// Retrieves and downcasts a column from an Arrow RecordBatch.
 pub fn get_column<'a, T: Array + 'static>(
     batch: &'a arrow::record_batch::RecordBatch,
     column_index: usize,
