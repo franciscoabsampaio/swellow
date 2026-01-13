@@ -264,7 +264,8 @@ def snapshot(
     json: bool = False,
 ) -> int:
     """
-    Create a snapshot of the current migration directory state.
+    Create a snapshot of the current database schemata.
+    ⚠️ Doesn't snapshot data, ONLY SCHEMA.
 
     Args:
         db: Database connection string.

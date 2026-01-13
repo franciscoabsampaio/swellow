@@ -4,9 +4,10 @@
 
 ## Getting Started
 
-Swellow comes in two packages: a [Rust CLI](#cli), and [a Python package](#python-module). We've also created a [GitHub Action for quick-and-easy integration in CI pipelines](https://github.com/franciscoabsampaio/action-swellow/).
+Swellow comes in two packages: a [Rust CLI](#cli), and [a Python package](#python-module).
+We've also created a [GitHub Action for quick-and-easy integration in CI pipelines](https://github.com/franciscoabsampaio/action-swellow/).
 
-Behind the scenes, all versions of swellow use the Rust backend, ensuring consistent behaviour across tools.
+Behind the scenes, all versions of swellow use the Rust backend, ensuring consistent behaviour across tools, so let's get started!
 
 <details><summary><b>CLI</b></summary>
 
@@ -22,12 +23,31 @@ Verify the installation:
 swellow --version
 ```
 
-and you're good to go!
+And ensure that swellow has everything it needs to run with `peck`:
+
+```bash
+swellow --db DATABASE_CONNECTION_STRING --dir MIGRATIONS_DIRECTORY peck
+```
 
 </details>
 
-<details>
-<summary><b>Python Module</b></summary>
+<details><summary><b>Python CLI</b></summary>
+
+Just like with any other Python package:
+
+```bash
+pip install swellow
+```
+
+And use it as a CLI:
+
+```bash
+swellow --db $DATABASE_CONNECTION_STRING --dir './migrations' peck
+```
+
+</details>
+
+<details><summary><b>Python Module</b></summary>
 
 Just like with any other Python package:
 
@@ -42,24 +62,17 @@ import swellow
 import os
 
 DIRECTORY_WITH_MIGRATIONS='./migrations'
-DATABASE_CONNECTION_STRING=os.getenv("CONNECTION_STRING")
+DATABASE_CONNECTION_STRING=os.getenv("DATABASE_CONNECTION_STRING")
 
-swellow.up(
+swellow.peck(
   db=DATABASE_CONNECTION_STRING,
   directory=DIRECTORY_WITH_MIGRATIONS,
 )
 ```
 
-Or use it as a CLI:
-
-```bash
-swellow --version
-```
-
 </details>
 
-<details>
-<summary><b>GitHub Action</b></summary>
+<details><summary><b>GitHub Action</b></summary>
 
 Simply add it to your workflow:
 
@@ -67,9 +80,11 @@ Simply add it to your workflow:
 - name: Execute migrations
   use: franciscoabsampaio/action-swellow@v1
   with:
-    - command: up
+    - command: peck
     - connection-string: postgresql://<username>:<password>@<host>:<port>/<database>
 ```
+
+It's that easy!
 
 </details>
 
@@ -114,13 +129,29 @@ ALTER TABLE nest ADD COLUMN twigs_collected INTEGER;
 
 **If any migration or rollback fails, the transaction will be rolled back, and the database will keep its original state.** Users can also preemptively check the validity of transactions by passing the `--dry-run` flag, which automatically cancels (and rolls back) the transaction after executing all migrations.
 
+### Pecking is Optional
+
+Swellow keeps track of migrations in its `records` table, which resides in a special schema `swellow` that it creates when the command `peck` is executed.
+
+Behind the scenes, all migration commands start by running `peck`, making it, in most cases, superfluous. Pecking can be very useful for testing database connectivity, though. More importantly, perhaps, [it really makes you feel like a bird](https://knowyourmeme.com/memes/this-game-really-makes-you-feel-like-batman).
+
 ### Taking Snapshots
 
-The `snapshot` command/function scans the database and creates an `up.sql` script with everything needed to create all relations in the database. Database engines are used by default (e.g. `pg_dump` for PostgreSQL), so be sure to look up the relevant documentation if you find any issue with the snapshot behaviour.
+**⚠️ `swellow snapshot` does not save any data.** It is aimed at cleaning up directories filled with old migrations and combining them into a current definition of the database. The `snapshot` command/function scans the database and creates an `up.sql` script with everything needed to create all relations in the database.
+
+In line with swellow's 'SQL-first' design philosophy In designing swellow, we believe that native options should be used when available (e.g. `pg_dump` for PostgreSQL). Unfortunately, this can make snapshotting behaviour *very inconsistent across databases*. On the upside, snapshots are completely harmless.
+
+Here's a quick reference to what snapshotting does for each database:
+
+- **Postgres**: runs `pg_dump` against the database.
+- **Spark-Delta**: iterates through all databases and tables, generating `CREATE DATABASE` for databases, and parsing table properties obtained from `DESCRIBE TABLE` and `DESCRIBE DETAIL` into `CREATE` statements.
+- **Spark-Iceberg**: iterates through all databases and tables, generating `CREATE DATABASE` for databases and executing Iceberg's native `SHOW CREATE TABLE` for tables.
+
+Users are encouraged to take a look at the source code, look up the relevant documentation, and if they find any limitation with the snapshotting behaviour, [open an issue](https://github.com/franciscoabsampaio/swellow/issues/new/choose).
 
 ### Migrating to Swellow
 
-**Swellow** makes as few assumptions as possible about an existing database. For this reason, given a directory of migration scripts, all that is required is a connection to the existing database - `swellow up` will take care of the rest.
+**Swellow** makes as few assumptions as possible about an existing database, and prioritizes native options when available. For this reason, given a directory of migration scripts, all that is required is a connection to the existing database - `swellow up` will take care of the rest.
 
 If you wish to start tracking the database in CI, [take a snapshot](#taking-snapshots).
 
@@ -139,7 +170,7 @@ Commands:
   peck      Test connection to the database.
   up        Generate a migration plan and execute it.
   down      Generate a rollback plan and execute it.
-  snapshot  Use pg_dump to take a snapshot of the database schema into a set of CREATE statements.
+  snapshot  Take a snapshot of the database schema into a set of CREATE statements.
 
 Options:
       --db <DB_CONNECTION_STRING>  Database connection string. Please follow your database's recommended format:

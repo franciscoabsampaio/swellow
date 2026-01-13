@@ -143,7 +143,8 @@ pub enum Commands {
         args: SwellowArgs,
     },
 
-    #[command(about = "Take a snapshot of the database schema into a set of CREATE statements.
+    #[command(about = "⚠️ Doesn't snapshot data, ONLY SCHEMA.
+Take a snapshot of the database schema into a set of CREATE statements.
 Automatically creates a new version migration subdirectory like '<VERSION>_snapshot'.
 ⚠️ Postgres: pg_dump must be installed with a version matching the server's.")]
     Snapshot {}
