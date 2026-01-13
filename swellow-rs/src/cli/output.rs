@@ -35,6 +35,7 @@ use serde_json::Value;
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SwellowErrorJson {
+    Argument { message: String },
     Engine { message: String },
     FileNotFound { message: String },
     Io { message: String },
@@ -48,7 +49,8 @@ impl From<&SwellowError> for SwellowErrorJson {
         let stderr = format!("{error}");
 
         match &error.kind {
-            SwellowErrorKind::DryRunUnsupportedEngine(_) => Self::Engine { message: stderr },
+            SwellowErrorKind::DryRunUnsupportedEngine(_) => Self::Argument { message: stderr },
+            SwellowErrorKind::DryRunRequiresTransaction => Self::Argument { message: stderr },
             SwellowErrorKind::Engine(_) => Self::Engine { message: stderr },
             SwellowErrorKind::Fmt(_) => Self::Io { message: stderr },
             SwellowErrorKind::InvalidVersionInterval(..) => Self::Version { message: stderr },

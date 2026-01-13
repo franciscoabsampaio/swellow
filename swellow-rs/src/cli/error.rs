@@ -26,6 +26,7 @@ impl Error for SwellowError {
 #[derive(Debug)]
 pub enum SwellowErrorKind {
     DryRunUnsupportedEngine(Engine),
+    DryRunRequiresTransaction,
     Engine(EngineError),
     Fmt(std::fmt::Error),
     InvalidVersionInterval(i64, i64),
@@ -39,6 +40,7 @@ impl fmt::Display for SwellowErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DryRunUnsupportedEngine(engine) => write!(f, "Dry run is not supported for engine: {engine:?}"),
+            Self::DryRunRequiresTransaction => write!(f, "Option '--dry-run' cannot be used together with '--no-transaction'"),
             Self::Engine(error) => write!(f, "{}", error.kind),
             Self::Fmt(e) => write!(f, "Formatting error: {e}"),
             Self::InvalidVersionInterval(from, to) => write!(f, "Invalid version interval: from ({from}) > to ({to})"),

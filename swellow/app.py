@@ -17,6 +17,10 @@ class SwellowError(Exception):
         self.message = message
 
 
+class SwellowArgumentError(SwellowError):
+    exit_code = 2
+
+
 class SwellowEngineError(SwellowError):
     exit_code = 3
 
@@ -67,7 +71,9 @@ def _parse_error(stdout: str, stderr: str):
     err_type = error.get("type", "unknown")
     message = error.get("message", "Unknown error")
 
-    if err_type == "engine":
+    if err_type == "argument":
+        raise SwellowArgumentError(message)
+    elif err_type == "engine":
         raise SwellowEngineError(message)
     elif err_type == "file_not_found":
         raise SwellowFileNotFoundError(message)

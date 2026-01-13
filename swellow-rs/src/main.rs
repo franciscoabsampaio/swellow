@@ -53,6 +53,7 @@ async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value
                 migration::MigrationDirection::Up,
                 args.plan,
                 args.dry_run,
+                args.no_transaction,
                 args.ignore_locks,
             ).await
         ),
@@ -66,6 +67,7 @@ async fn run_command(args: &cli::Cli) -> output::SwellowOutput<serde_json::Value
                 migration::MigrationDirection::Down,
                 args.plan,
                 args.dry_run,
+                args.no_transaction,
                 args.ignore_locks,
             ).await
         ),

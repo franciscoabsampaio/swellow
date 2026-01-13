@@ -94,7 +94,8 @@ If no record is enabled, swellow will assume the current version to be 0.",
 
     #[arg(
         long,
-        help = "Migrate up/down to the specified version ID.\nOnly numbers up to 64 bits.",
+        help = "Migrate up/down to the specified version ID.
+Only numbers up to 64 bits.",
     )]
     pub target_version_id: Option<i64>,
 
@@ -112,9 +113,18 @@ If no record is enabled, swellow will assume the current version to be 0.",
 
     #[arg(
         long,
-        help = "Ignore acquiring locks. ⚠️ Warning: sequential execution of migrations is not guaranteed when this flag is set.",
+        help = "Ignore acquiring locks.
+⚠️ Warning: sequential execution of migrations is not guaranteed when this flag is set.",
     )]
     pub ignore_locks: bool,
+
+    #[arg(
+        long,
+        help = "Execute the command outside a transaction block.
+Some databases may require it for operations like CREATE DATABASE, DROP DATABASE, and ALTER SYSTEM.
+⚠️ Warning: unsafe. This option cannot be set together with dry runs.",
+    )]
+    pub no_transaction: bool,
 }
 
 #[derive(Subcommand)]

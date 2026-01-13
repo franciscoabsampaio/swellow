@@ -86,9 +86,14 @@ pub async fn migrate(
     direction: MigrationDirection,
     flag_plan: bool,
     flag_dry_run: bool,
+    flag_no_transaction: bool,
     flag_ignore_locks: bool,
 ) -> Result<(), SwellowError> {
-    // Dry run is not supported for Spark engines
+    // --dry-run cannot be set together with --no-transaction
+    if flag_dry_run && flag_no_transaction {
+        return Err(SwellowError { kind: SwellowErrorKind::DryRunRequiresTransaction });
+    }
+    // --dry-run is not supported for Spark engines
     if flag_dry_run && matches!(backend, db::EngineBackend::SparkDelta(_) | db::EngineBackend::SparkIceberg(_)) {
         return Err(SwellowError { kind: SwellowErrorKind::DryRunUnsupportedEngine(backend.engine()) });
     }
