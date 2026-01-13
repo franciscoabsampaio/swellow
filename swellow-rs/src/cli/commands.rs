@@ -100,8 +100,12 @@ pub async fn migrate(
 
     peck(backend).await?;
 
-    tracing::info!("Beginning transaction...");
-    backend.begin().await?;
+    if flag_no_transaction {
+        tracing::info!("Running outside transaction...");
+    } else {
+        tracing::info!("Beginning transaction...");
+        backend.begin().await?;
+    }
 
     // Acquire a lock on the swellow.records table
     // To ensure no other migration process is underway.
@@ -159,12 +163,16 @@ pub async fn migrate(
         backend.update_record(&direction, *version_id).await?;
     }
 
-    if flag_dry_run {
-        backend.rollback().await?;
-        tracing::info!("Dry run completed - transaction successfully rolled back 🐦");
+    if flag_no_transaction {
+        tracing::info!("Migration completed 🐦");
     } else {
-        backend.commit().await?;
-        tracing::info!("Migration completed - transaction successfully committed 🐦");
+        if flag_dry_run {
+            backend.rollback().await?;
+            tracing::info!("Dry run completed - transaction successfully rolled back 🐦");
+        } else {
+            backend.commit().await?;
+            tracing::info!("Migration completed - transaction successfully committed 🐦");
+        }
     }
 
     Ok(())
