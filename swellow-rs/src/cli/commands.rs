@@ -183,6 +183,8 @@ pub async fn snapshot(
     backend: &mut db::EngineBackend,
     migration_dir: &str
 ) -> Result<(), SwellowError> {
+    peck(backend).await?;
+
     tracing::info!("Taking database snapshot...");
 
     let output = backend.snapshot().await?;
