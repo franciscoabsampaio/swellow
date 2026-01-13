@@ -84,7 +84,7 @@ impl SparkEngine {
         Ok(self.session.query(sql).execute().await?)
     }
 
-    async fn fetch_vec_of_strings(&mut self, sql: &str, column_index: usize) -> Result<Vec<String>, EngineError> {
+    async fn fetch_column_of_strings(&mut self, sql: &str, column_index: usize) -> Result<Vec<String>, EngineError> {
         let batches: Vec<RecordBatch> = self.sql(sql).await?;
 
         let mut vec_of_strings: Vec<String> = vec![];
@@ -186,6 +186,7 @@ impl SparkEngine {
 
 impl DbEngine for SparkEngine {
     async fn ensure_table(&mut self) -> Result<(), EngineError> {
+        self.sql(&"CREATE DATABASE IF NOT EXISTS swellow").await?;
         self.sql(&format!(r#"
             CREATE TABLE IF NOT EXISTS swellow.records (
                 version_id BIGINT,
@@ -396,7 +397,7 @@ impl DbEngine for SparkEngine {
         let mut snapshot_string: String = String::new();
 
         // 1: Get all databases
-        let db_names: Vec<String> = self.fetch_vec_of_strings("SHOW DATABASES", 0).await?;
+        let db_names: Vec<String> = self.fetch_column_of_strings("SHOW DATABASES", 0).await?;
 
         // 2: Iterate over databases
         for db in db_names {
@@ -404,19 +405,18 @@ impl DbEngine for SparkEngine {
             snapshot_string = format!("{snapshot_string}CREATE DATABASE {db};\n\n");
 
             // 3. Get tables in this database
-            let table_names: Vec<String> = self.fetch_vec_of_strings(
+            let table_names: Vec<String> = self.fetch_column_of_strings(
                 // Get the second column which contains table names
                 &format!("SHOW TABLES IN {db}"), 1
             ).await?;
 
             // 4: For each table, get CREATE statement
             for table in table_names {
-                println!("{:?}", self.sql(
-                    &format!("SHOW CREATE TABLE {db}.{table}")
-                ).await?);
                 let stmt = match self.catalog {
                     SparkCatalog::Delta => self.generate_create_table_statement(&db, &table).await?,
-                    SparkCatalog::Iceberg => "temp".to_string(),
+                    SparkCatalog::Iceberg => self.fetch_column_of_strings(
+                        &format!("SHOW CREATE TABLE {db}.{table}"), 0
+                    ).await?[0].clone(),
                 };
                 snapshot_string = format!("{snapshot_string}{stmt};\n\n");
             }

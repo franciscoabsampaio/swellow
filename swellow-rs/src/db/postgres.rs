@@ -38,7 +38,7 @@ impl DbEngine for PostgresEngine {
     async fn ensure_table(&mut self) -> Result<(), EngineError> {
         let pool = PgPool::connect(&self.conn_str).await?;
         
-        sqlx::query("CREATE SCHEMA swellow;")
+        sqlx::query("CREATE SCHEMA IF NOT EXISTS swellow;")
             .execute(&pool)
             .await?;
         
