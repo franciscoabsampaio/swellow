@@ -46,9 +46,9 @@ def main():
         if args.command == "peck":
             return_code = peck(args.db, args.dir, engine=args.engine, verbose=args.verbose, quiet=args.quiet, json=args.json)
         elif args.command == "up":
-            return_code = up(args.db, args.dir, engine=args.engine, verbose=args.verbose, quiet=args.quiet, json=args.json, current_version_id=args.current_version_id, target_version_id=args.target_version_id, plan=args.plan, dry_run=args.dry_run)
+            return_code = up(args.db, args.dir, engine=args.engine, verbose=args.verbose, quiet=args.quiet, json=args.json, current_version_id=args.current_version_id, target_version_id=args.target_version_id, plan=args.plan, dry_run=args.dry_run, no_transaction=args.no_transaction)
         elif args.command == "down":
-            return_code = down(args.db, args.dir, engine=args.engine, verbose=args.verbose, quiet=args.quiet, json=args.json, current_version_id=args.current_version_id, target_version_id=args.target_version_id, plan=args.plan, dry_run=args.dry_run)
+            return_code = down(args.db, args.dir, engine=args.engine, verbose=args.verbose, quiet=args.quiet, json=args.json, current_version_id=args.current_version_id, target_version_id=args.target_version_id, plan=args.plan, dry_run=args.dry_run, no_transaction=args.no_transaction)
         elif args.command == "snapshot":
             return_code = snapshot(args.db, args.dir, engine=args.engine, verbose=args.verbose, quiet=args.quiet, json=args.json)
     except Exception as e:

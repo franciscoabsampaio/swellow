@@ -118,6 +118,7 @@ def up(
     target_version_id: int = None,
     plan: bool = False,
     dry_run: bool = False,
+    no_transaction: bool = False,
 ) -> int:
     """
     Apply migrations forward from the current to the target version.
@@ -133,6 +134,7 @@ def up(
         target_version_id: The version ID to migrate up to (if specified).
         plan: If True, output the migration plan without applying changes.
         dry_run: If True, simulate the migration without modifying the database.
+        no_transaction: If True, don't wrap the migration in a transaction.
 
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
@@ -156,6 +158,8 @@ def up(
         args.append("--plan")
     if dry_run:
         args.append("--dry-run")
+    if no_transaction:
+        args.append("--no-transaction")
     return _run_swellow(*args, capture_output=json, parse_error=json)
 
 
@@ -170,6 +174,7 @@ def down(
     target_version_id: int = None,
     plan: bool = False,
     dry_run: bool = False,
+    no_transaction: bool = False,
 ) -> int:
     """
     Roll back migrations from the current to the target version.
@@ -185,6 +190,7 @@ def down(
         target_version_id: The version ID to migrate down to (if specified).
         plan: If True, output the rollback plan without applying changes.
         dry_run: If True, simulate the rollback without modifying the database.
+        no_transaction: If True, don't wrap the migration in a transaction.
 
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
@@ -208,6 +214,8 @@ def down(
         args.append("--plan")
     if dry_run:
         args.append("--dry-run")
+    if no_transaction:
+        args.append("--no-transaction")
     return _run_swellow(*args, capture_output=json, parse_error=json)
 
 
