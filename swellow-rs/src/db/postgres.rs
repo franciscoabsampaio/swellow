@@ -2,27 +2,36 @@ use crate::db::{EngineError, error::EngineErrorKind};
 
 use super::DbEngine;
 use sqlparser;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Pool, Postgres, Transaction};
 use std::ops::DerefMut;
 use std::process;
 
 pub struct PostgresEngine {
     conn_str: String,
+    pool: Option<Pool<Postgres>>,
     tx: Option<Transaction<'static, Postgres>>,
 }
 
 
 impl PostgresEngine {
     pub fn new(conn_str: &str) -> Self {
-        return PostgresEngine { conn_str: conn_str.to_string(), tx: None }
+        return PostgresEngine { conn_str: conn_str.to_string(), pool: None, tx: None }
+    }
+
+    async fn pool(&mut self) -> Result<&PgPool, EngineError> {
+        if self.pool.is_none() {
+            let pool = PgPool::connect(&self.conn_str).await?;
+            self.pool = Some(pool);
+        }
+
+        self.pool.as_ref().ok_or_else(|| EngineError {
+            kind: EngineErrorKind::TransactionNotStarted,
+        })
     }
 
     async fn transaction(&mut self) -> Result<&mut Transaction<'static, Postgres>, EngineError> {
         if self.tx.is_none() {
-            let txn = PgPool::connect(&self.conn_str)
-                .await?
-                .begin()
-                .await?;
+            let txn = self.pool().await?.begin().await?;
             self.tx = Some(txn);
         }
         
@@ -30,10 +39,40 @@ impl PostgresEngine {
             kind: EngineErrorKind::TransactionNotStarted,
         })
     }
+
+    pub async fn begin(&mut self) -> Result<(), EngineError> {
+        self.pool().await?;
+        self.transaction().await?;
+
+        Ok(())
+    }
+
+    pub async fn rollback(&mut self) -> Result<(), EngineError> {
+        if let Some(tx) = self.tx.take() {
+            tx.rollback().await?;
+        }
+        Ok(())
+    }
+    
+    pub async fn commit(&mut self) -> Result<(), EngineError> {
+        if let Some(tx) = self.tx.take() {
+            tx.commit().await?;
+        }
+        Ok(())
+    }
+
+    pub async fn execute_outside_transaction(&mut self, sql: &str) -> Result<(), EngineError> {
+        let pool = self.pool().await?;
+
+        sqlx::raw_sql(&sql)
+            .execute(pool)
+            .await?;
+
+        Ok(())
+    }
 }
 
 
-// #[async_trait::async_trait]
 impl DbEngine for PostgresEngine {
     async fn ensure_table(&mut self) -> Result<(), EngineError> {
         let pool = PgPool::connect(&self.conn_str).await?;
@@ -63,12 +102,6 @@ impl DbEngine for PostgresEngine {
         .execute(&pool)
         .await?;
         
-        Ok(())
-    }
-
-    async fn begin(&mut self) -> Result<(), EngineError> {
-        self.transaction().await?;
-
         Ok(())
     }
 
@@ -182,20 +215,6 @@ impl DbEngine for PostgresEngine {
             .execute(&mut **tx)
             .await?;
         
-        Ok(())
-    }
-
-    async fn rollback(&mut self) -> Result<(), EngineError> {
-        if let Some(tx) = self.tx.take() {
-            tx.rollback().await?;
-        }
-        Ok(())
-    }
-    
-    async fn commit(&mut self) -> Result<(), EngineError> {
-        if let Some(tx) = self.tx.take() {
-            tx.commit().await?;
-        }
         Ok(())
     }
 
