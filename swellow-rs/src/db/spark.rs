@@ -204,10 +204,6 @@ impl DbEngine for SparkEngine {
         Ok(())
     }
 
-    async fn begin(&mut self) -> Result<(), EngineError> {
-        Ok(())
-    }
-
     async fn execute(&mut self, sql: &str) -> Result<(), EngineError> {
         self.sql(sql).await?;
         Ok(())
@@ -382,14 +378,6 @@ impl DbEngine for SparkEngine {
             .execute()
             .await?;
         
-        Ok(())
-    }
-
-    async fn rollback(&mut self) -> Result<(), EngineError> {
-        Ok(())
-    }
-    
-    async fn commit(&mut self) -> Result<(), EngineError> {
         Ok(())
     }
 

@@ -37,8 +37,7 @@ impl EngineBackend {
     pub async fn begin(&mut self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.begin().await,
-            EngineBackend::SparkDelta(engine) => engine.begin().await,
-            EngineBackend::SparkIceberg(engine) => engine.begin().await,
+            _ => Ok(()),
         }
     }
 
@@ -107,9 +106,13 @@ impl EngineBackend {
         }
     }
 
-    pub async fn execute(&mut self, sql: &str) -> Result<(), EngineError> {
+    pub async fn execute(&mut self, sql: &str, flag_no_transaction: bool) -> Result<(), EngineError> {
         match self {
-            EngineBackend::Postgres(engine) => engine.execute(sql).await?,
+            EngineBackend::Postgres(engine) => if flag_no_transaction {
+                engine.execute_outside_transaction(sql).await?
+            } else {
+                engine.execute(sql).await?
+            },
             EngineBackend::SparkDelta(engine) => engine.execute(sql).await?,
             EngineBackend::SparkIceberg(engine) => engine.execute(sql).await?,
         }
@@ -137,16 +140,14 @@ impl EngineBackend {
     pub async fn rollback(&mut self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.rollback().await,
-            EngineBackend::SparkDelta(engine) => engine.rollback().await,
-            EngineBackend::SparkIceberg(engine) => engine.rollback().await,
+            _ => Ok(()),
         }
     }
 
     pub async fn commit(&mut self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.commit().await,
-            EngineBackend::SparkDelta(engine) => engine.commit().await,
-            EngineBackend::SparkIceberg(engine) => engine.commit().await,
+            _ => Ok(()),
         }
     }
 
@@ -162,7 +163,6 @@ impl EngineBackend {
 
 pub trait DbEngine {
     async fn ensure_table(&mut self) -> Result<(), EngineError>;
-    async fn begin(&mut self) -> Result<(), EngineError>;
     async fn execute(&mut self, sql: &str) -> Result<(), EngineError>;
     async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError>;
     async fn acquire_lock(&mut self) -> Result<(), EngineError>;
@@ -177,7 +177,5 @@ pub trait DbEngine {
         checksum: &str
     ) -> Result<(), EngineError>;
     async fn update_record(&mut self, status: &str, version_id: i64) -> Result<(), EngineError>;
-    async fn rollback(&mut self) -> Result<(), EngineError>;
-    async fn commit(&mut self) -> Result<(), EngineError>;
     async fn snapshot(&mut self) -> Result<String, EngineError>;
 }

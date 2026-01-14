@@ -157,7 +157,7 @@ pub async fn migrate(
         // and the SQL that was effectively executed.
         // Effectively, the priority is parseable statements - not resources.
         for stmt in &migration.statements {
-            backend.execute(&stmt.to_string()).await?;
+            backend.execute(&stmt.to_string(), flag_no_transaction).await?;
         }
         // Update records' status
         backend.update_record(&direction, *version_id).await?;
