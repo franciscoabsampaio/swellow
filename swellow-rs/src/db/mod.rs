@@ -1,7 +1,8 @@
 mod arrow_utils;
 mod error;
-mod spark;
 mod postgres;
+mod spark;
+mod sql_common;
 pub use error::{EngineError, EngineErrorKind};
 pub use postgres::PostgresEngine;
 pub use spark::{SparkEngine, SparkCatalog};
@@ -26,6 +27,13 @@ impl EngineBackend {
         }
     }
 
+    pub fn disable_transactions(&mut self) -> () {
+        match self {
+            EngineBackend::Postgres(engine) => engine.disable_transactions(),
+            _ => (),
+        }
+    }
+
     pub async fn ensure_table(&mut self) -> Result<(), EngineError> {
         match self {
             EngineBackend::Postgres(engine) => engine.ensure_table().await,
@@ -41,11 +49,11 @@ impl EngineBackend {
         }
     }
 
-    pub async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError> {
+    pub async fn fetch_latest_applied_version(&mut self) -> Result<Option<i64>, EngineError> {
         match self {
-            EngineBackend::Postgres(engine) => engine.fetch_optional_i64(sql).await,
-            EngineBackend::SparkDelta(engine) => engine.fetch_optional_i64(sql).await,
-            EngineBackend::SparkIceberg(engine) => engine.fetch_optional_i64(sql).await,
+            EngineBackend::Postgres(engine) => engine.fetch_latest_applied_version().await,
+            EngineBackend::SparkDelta(engine) => engine.fetch_latest_applied_version().await,
+            EngineBackend::SparkIceberg(engine) => engine.fetch_latest_applied_version().await,
         }
     }
 
@@ -106,18 +114,12 @@ impl EngineBackend {
         }
     }
 
-    pub async fn execute(&mut self, sql: &str, flag_no_transaction: bool) -> Result<(), EngineError> {
+    pub async fn execute(&mut self, sql: &str) -> Result<(), EngineError> {
         match self {
-            EngineBackend::Postgres(engine) => if flag_no_transaction {
-                engine.execute_outside_transaction(sql).await?
-            } else {
-                engine.execute(sql).await?
-            },
-            EngineBackend::SparkDelta(engine) => engine.execute(sql).await?,
-            EngineBackend::SparkIceberg(engine) => engine.execute(sql).await?,
+            EngineBackend::Postgres(engine) => engine.execute(sql).await,
+            EngineBackend::SparkDelta(engine) => engine.execute(sql).await,
+            EngineBackend::SparkIceberg(engine) => engine.execute(sql).await,
         }
-
-        Ok(())
     }
 
     pub async fn update_record(
@@ -161,10 +163,12 @@ impl EngineBackend {
 }
 
 
+/// A trait defining the required business operations for Swellow.
+/// This abstracts over different database engines.
 pub trait DbEngine {
     async fn ensure_table(&mut self) -> Result<(), EngineError>;
     async fn execute(&mut self, sql: &str) -> Result<(), EngineError>;
-    async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError>;
+    async fn fetch_latest_applied_version(&mut self) -> Result<Option<i64>, EngineError>;
     async fn acquire_lock(&mut self) -> Result<(), EngineError>;
     async fn release_lock(&mut self) -> Result<(), EngineError>;
     async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError>;

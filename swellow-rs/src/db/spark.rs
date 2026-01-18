@@ -1,12 +1,20 @@
-use crate::db::{DbEngine, EngineError, error::EngineErrorKind};
+use crate::db::{DbEngine, EngineError, error::EngineErrorKind, sql_common};
 use crate::db::arrow_utils::get_column;
 use arrow;
-use arrow::array::{Array, Int64Array, ListArray, MapArray, RecordBatch, StringArray, StructArray};
-use arrow::datatypes::DataType;
+use arrow::array::{
+    Array,
+    ArrowPrimitiveType,
+    ListArray,
+    MapArray,
+    PrimitiveArray,
+    RecordBatch,
+    StringArray,
+    StructArray
+};
+use arrow::datatypes::{DataType, Int32Type, Int64Type};
 use spark_connect as spark;
 use std::fmt::Write;
 use std::vec;
-
 
 /// Helper: Parses the "DESCRIBE TABLE" output to build column definitions
 /// Input batch columns: [col_name, data_type, comment]
@@ -181,6 +189,32 @@ impl SparkEngine {
         
         Ok(stmt)
     }
+
+    /// Fetch an optional single column integer
+    async fn fetch_optional_int<T>(
+        &mut self,
+        sql: &str,
+        data_type: DataType,
+    ) -> Result<Option<T::Native>, EngineError>
+    where
+        T: ArrowPrimitiveType,
+    {
+        let batches = self.sql(sql).await?;
+
+        let first_batch = match batches.first() {
+            Some(batch) => batch,
+            None => return Ok(None),
+        };
+
+        let col: &PrimitiveArray<T> =
+            get_column(first_batch, 0, data_type)?;
+
+        if col.is_empty() || col.is_null(0) {
+            return Ok(None);
+        }
+
+        Ok(Some(col.value(0)))
+    }
 }
 
 
@@ -209,49 +243,18 @@ impl DbEngine for SparkEngine {
         Ok(())
     }
 
-    /// Fetch an optional single column value
-    async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError> {
-        let batches: Vec<RecordBatch> = self.sql(sql).await?;
-
-        // If no batches returned, return None
-        let first_batch = match batches.first() {
-            Some(batch) => batch,
-            None => return Ok(None),
-        };
-
-        // Get the first column as Int64Array
-        // Raise error if type mismatch or column not found
-        let col = get_column::<Int64Array>(
-            first_batch,
-            0,
+    async fn fetch_latest_applied_version(&mut self) -> Result<Option<i64>, EngineError> {
+        self.fetch_optional_int::<Int64Type>(
+            sql_common::QUERY_LATEST_VERSION,
             DataType::Int64
-        )?;
-
-        // If the column is empty, return None
-        if col.is_empty() {
-            return Ok(None);
-        }
-
-        // Return the first value (only if not null)
-        if col.is_null(0) {
-            return Ok(None);
-        }
-
-        Ok(Some(col.value(0)))
+        ).await
     }
 
     async fn acquire_lock(&mut self) -> Result<(), EngineError> {
-        let query_select_lock = r#"
-            SELECT *
-            FROM swellow.records
-            WHERE version_id = 0
-                AND object_type = 'LOCK'
-                AND object_name_before = 'LOCK'
-                AND object_name_after = 'LOCK'
-                AND status = 'LOCKED'
-        "#;
-
-        if self.fetch_optional_i64(query_select_lock).await?.is_some() {
+        if self.fetch_optional_int::<Int32Type>(
+            sql_common::QUERY_LOCK_EXISTS,
+            DataType::Int64
+        ).await?.is_some() {
             return Err(EngineError { kind: EngineErrorKind::LockConflict })
         }
 
@@ -284,13 +287,7 @@ impl DbEngine for SparkEngine {
     }
 
     async fn release_lock(&mut self) -> Result<(), EngineError> {
-        self.session.query(r#"
-            DELETE FROM swellow.records
-            WHERE version_id = 0
-                AND object_type = 'LOCK'
-                AND object_name_before = 'LOCK'
-                AND object_name_after = 'LOCK'
-        "#)
+        self.session.query(sql_common::QUERY_DELETE_LOCK)
             .execute()
             .await?;
 

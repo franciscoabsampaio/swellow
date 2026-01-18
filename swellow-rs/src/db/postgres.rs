@@ -1,30 +1,43 @@
-use crate::db::{EngineError, error::EngineErrorKind};
-
+use crate::db::{EngineError, error::EngineErrorKind, sql_common};
 use super::DbEngine;
 use sqlparser;
 use sqlx::{PgPool, Pool, Postgres, Transaction};
-use std::ops::DerefMut;
+use sqlx::postgres::PgPoolOptions;
 use std::process;
+
 
 pub struct PostgresEngine {
     conn_str: String,
     pool: Option<Pool<Postgres>>,
     tx: Option<Transaction<'static, Postgres>>,
+    flag_no_transaction: bool,  // Flag to indicate if transactions should be used
 }
 
 
 impl PostgresEngine {
     pub fn new(conn_str: &str) -> Self {
-        return PostgresEngine { conn_str: conn_str.to_string(), pool: None, tx: None }
+        return PostgresEngine {
+            conn_str: conn_str.to_string(),
+            pool: None,
+            tx: None,
+            flag_no_transaction: false,
+        };
     }
 
-    async fn pool(&mut self) -> Result<&PgPool, EngineError> {
+    pub fn disable_transactions(&mut self) -> () {
+        self.flag_no_transaction = true;
+    }
+
+    async fn pool(&mut self) -> Result<PgPool, EngineError> {
         if self.pool.is_none() {
-            let pool = PgPool::connect(&self.conn_str).await?;
+            let pool = PgPoolOptions::new()
+                .max_connections(5)
+                .connect(&self.conn_str)
+                .await?;
             self.pool = Some(pool);
         }
 
-        self.pool.as_ref().ok_or_else(|| EngineError {
+        self.pool.clone().ok_or_else(|| EngineError {
             kind: EngineErrorKind::TransactionNotStarted,
         })
     }
@@ -38,6 +51,22 @@ impl PostgresEngine {
         self.tx.as_mut().ok_or_else(|| EngineError {
             kind: EngineErrorKind::TransactionNotStarted,
         })
+    }
+
+    async fn _execute(&mut self, sql: &str) -> Result<(), EngineError> {
+        if self.flag_no_transaction {
+            let pool = self.pool().await?;
+            sqlx::raw_sql(&sql)
+                .execute(&pool)
+                .await?;
+        } else {
+            let tx = self.transaction().await?;
+            sqlx::raw_sql(&sql)
+                .execute( &mut **tx)
+                .await?;
+        }
+
+        Ok(())
     }
 
     pub async fn begin(&mut self) -> Result<(), EngineError> {
@@ -61,14 +90,38 @@ impl PostgresEngine {
         Ok(())
     }
 
-    pub async fn execute_outside_transaction(&mut self, sql: &str) -> Result<(), EngineError> {
-        let pool = self.pool().await?;
+    /// Returns true if the query returns at least one row
+    async fn exists(&mut self, sql: &str) -> Result<bool, EngineError> {
+        if self.flag_no_transaction {
+            let pool = self.pool().await?;
+            Ok(sqlx::query_scalar::<_, i32>(sql)
+                .fetch_optional(&pool)
+                .await?
+                .is_some())
+        } else {
+            let tx = self.transaction().await?;
+            Ok(sqlx::query_scalar::<_, i32>(sql)
+                .fetch_optional(&mut **tx)
+                .await?
+                .is_some())
+        }
+    }
 
-        sqlx::raw_sql(&sql)
-            .execute(pool)
-            .await?;
-
-        Ok(())
+    /// Fetch an optional single column value
+    async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError> {
+        if self.flag_no_transaction {
+            let pool = self.pool().await?;
+            sqlx::query_scalar(sql)
+                .fetch_one(&pool)
+                .await
+                .map_err(Into::into)
+        } else {
+            let tx = self.transaction().await?;
+            sqlx::query_scalar(sql)
+                .fetch_one(&mut **tx)
+                .await
+                .map_err(Into::into)
+        }
     }
 }
 
@@ -106,51 +159,82 @@ impl DbEngine for PostgresEngine {
     }
 
     async fn execute(&mut self, sql: &str) -> Result<(), EngineError> {
-        let tx = self.transaction().await?;
-
-        sqlx::raw_sql(&sql)
-            .execute(&mut **tx)
-            .await?;
-
-        Ok(())
+        self._execute(sql).await
     }
 
-    /// Fetch an optional single column value
-    async fn fetch_optional_i64(&mut self, sql: &str) -> Result<Option<i64>, EngineError> {
-        let tx = self.transaction().await?;
-        
-        Ok(sqlx::query_scalar(sql)
-            .fetch_one(&mut **tx)
-            .await?)
+    async fn fetch_latest_applied_version(&mut self) -> Result<Option<i64>, EngineError> {
+        self.fetch_optional_i64(sql_common::QUERY_LATEST_VERSION).await
     }
 
     async fn acquire_lock(&mut self) -> Result<(), EngineError> {
-        let tx = self.transaction().await?;
+        if self.flag_no_transaction {
+            // If transactions are disabled, we simulate a lock
+            // by inserting a LOCK record and checking for its existence.
+            if self.exists(sql_common::QUERY_LOCK_EXISTS).await? {
+                return Err(EngineError { kind: EngineErrorKind::LockConflict })
+            }
 
-        sqlx::query("LOCK TABLE swellow.records IN ACCESS EXCLUSIVE MODE;")
-            .execute(tx.deref_mut())
-            .await?;
+            self.execute(r#"
+                INSERT INTO swellow.records (
+                    version_id,
+                    object_type,
+                    object_name_before,
+                    object_name_after,
+                    status,
+                    checksum,
+                    dtm_created_at,
+                    dtm_updated_at
+                )
+                VALUES (
+                    0,
+                    'LOCK',
+                    'LOCK',
+                    'LOCK',
+                    'LOCKED',
+                    'LOCK',
+                    now(),
+                    now()
+                )
+            "#).await?;
+        } else {
+            self.execute(&"LOCK TABLE swellow.records IN ACCESS EXCLUSIVE MODE;").await?;
+        }
 
         Ok(())
     }
 
     async fn release_lock(&mut self) -> Result<(), EngineError> {
+        if self.flag_no_transaction {
+            self.execute(sql_common::QUERY_DELETE_LOCK).await?;
+        } else {
+            // In a transaction, the lock is released automatically on commit/rollback.
+            // No action needed.
+        }
+
         Ok(())
     }
 
     async fn disable_records(&mut self, current_version_id: i64) -> Result<(), EngineError> {
-        let tx = self.transaction().await?;
-
-        sqlx::query(
-            r#"
+        let query = r#"
             UPDATE swellow.records
             SET status='DISABLED'
             WHERE version_id > $1
-            "#,
-        )
-            .bind(current_version_id)
-            .execute(&mut **tx)
-            .await?;
+        "#;
+
+        if self.flag_no_transaction {
+            let pool = self.pool().await?;
+            sqlx::query(query)
+                .bind(current_version_id)
+                .execute(&pool)
+                .await?;
+        } else {
+            let tx = self.transaction().await?;
+            sqlx::query(query)
+                .bind(current_version_id)
+                .execute(&mut **tx)
+                .await?;
+        }
+
         Ok(())
     }
 
@@ -162,10 +246,7 @@ impl DbEngine for PostgresEngine {
         version_id: i64,
         checksum: &str
     ) -> Result<(), EngineError> {
-        let tx = self.transaction().await?;
-
-        sqlx::query(
-            r#"
+        let query = r#"
             INSERT INTO swellow.records(
                 object_type,
                 object_name_before,
@@ -186,34 +267,58 @@ impl DbEngine for PostgresEngine {
             DO UPDATE SET
                 status = EXCLUDED.status,
                 checksum = EXCLUDED.checksum
-            "#,
-        )
-            .bind(object_type.to_string())
-            .bind(object_name_before)
-            .bind(object_name_after)
-            .bind(version_id)
-            .bind(checksum.to_string())
-            .execute(&mut **tx)
-            .await?;
+        "#;
+
+        if self.flag_no_transaction {
+            let pool = self.pool().await?;
+            sqlx::query(query)
+                .bind(object_type.to_string())
+                .bind(object_name_before)
+                .bind(object_name_after)
+                .bind(version_id)
+                .bind(checksum.to_string())
+                .execute(&pool)
+                .await?;
+        } else {
+            let tx = self.transaction().await?;
+            sqlx::query(query)
+                .bind(object_type.to_string())
+                .bind(object_name_before)
+                .bind(object_name_after)
+                .bind(version_id)
+                .bind(checksum.to_string())
+                .execute(&mut **tx)
+                .await?;
+        }
 
         Ok(())
     }
-    async fn update_record(&mut self, status: &str, version_id: i64) -> Result<(), EngineError> {
-        let tx = self.transaction().await?;
 
-        sqlx::query(
-            r#"
+
+    async fn update_record(&mut self, status: &str, version_id: i64) -> Result<(), EngineError> {
+        let query = r#"
             UPDATE swellow.records
             SET
                 status=$1
             WHERE
                 version_id=$2
-            "#,
-        )
-            .bind(status)
-            .bind(version_id)
-            .execute(&mut **tx)
-            .await?;
+        "#;
+
+        if self.flag_no_transaction {
+            let pool = self.pool().await?;
+            sqlx::query(query)
+                .bind(status)
+                .bind(version_id)
+                .execute(&pool)
+                .await?;
+        } else {
+            let tx = self.transaction().await?;
+            sqlx::query(query)
+                .bind(status)
+                .bind(version_id)
+                .execute(&mut **tx)
+                .await?;
+        }
         
         Ok(())
     }

@@ -28,11 +28,7 @@ async fn plan(
     // by querying the records table for the latest applied/tested version.
     // If unavailable, default to 0 for Up migrations, or i64::MAX for Down migrations.
     let latest_version_from_records = backend
-        .fetch_optional_i64(
-            "SELECT MAX(version_id) AS version_id
-             FROM swellow.records
-             WHERE status IN ('APPLIED', 'TESTED')",
-        )
+        .fetch_latest_applied_version()
         .await?
         .unwrap_or_else(|| match direction {
             MigrationDirection::Up => 0,
@@ -104,6 +100,7 @@ pub async fn migrate(
 
     if flag_no_transaction {
         tracing::info!("Running outside transaction...");
+        backend.disable_transactions();
     } else {
         tracing::info!("Beginning transaction...");
         backend.begin().await?;
@@ -159,7 +156,7 @@ pub async fn migrate(
         // and the SQL that was effectively executed.
         // Effectively, the priority is parseable statements - not resources.
         for stmt in &migration.statements {
-            backend.execute(&stmt.to_string(), flag_no_transaction).await?;
+            backend.execute(&stmt.to_string()).await?;
         }
         // Update records' status
         backend.update_record(&direction, *version_id).await?;
