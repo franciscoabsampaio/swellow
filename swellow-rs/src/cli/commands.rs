@@ -25,6 +25,8 @@ async fn plan(
     direction: &MigrationDirection,
 ) -> Result<MigrationCollection, SwellowError> {
     // Determine current migration version
+    // by querying the records table for the latest applied/tested version.
+    // If unavailable, default to 0 for Up migrations, or i64::MAX for Down migrations.
     let latest_version_from_records = backend
         .fetch_optional_i64(
             "SELECT MAX(version_id) AS version_id
