@@ -4,6 +4,5 @@ CREATE TABLE bird_watch.flock (
     latin_name TEXT NOT NULL,
     wingspan_cm INTEGER,
     dtm_hatched_at TIMESTAMP DEFAULT now(),
-    dtm_last_seen_at TIMESTAMP DEFAULT now(),
-    twigs_collected INTEGER
+    dtm_last_seen_at TIMESTAMP DEFAULT now()
 );

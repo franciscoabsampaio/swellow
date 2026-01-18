@@ -1,1 +1,1 @@
-DROP TABLE flock;
+DROP TABLE bird_watch.flock;

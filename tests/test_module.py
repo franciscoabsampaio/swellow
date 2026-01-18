@@ -77,34 +77,81 @@ def test_missing_up(db_backend):
 
 # Test missing down.sql failure
 def test_missing_down(db_backend):
+    directory = f"./tests/{db_backend[1]}/missing_down/"
     swellow.up(
         db=db_backend[0],
-        directory=f"./tests/{db_backend[1]}/missing_down",
+        directory=directory,
         engine=db_backend[1],
         json=True
     )
     with pytest.raises(SwellowFileNotFoundError):
         swellow.down(
             db=db_backend[0],
-            directory=f"./tests/{db_backend[1]}/missing_down",
+            directory=directory,
             engine=db_backend[1],
             json=True
         )
 
 # Test migration with rollback
-def test_migrate_and_rollback(db_backend):
+@pytest.mark.parametrize("flag_no_transaction", [True, False])
+def test_migrate_and_rollback(db_backend, flag_no_transaction):
     # Migrate and rollback to/from progressively higher versions.
+    directory = f"./tests/{db_backend[1]}/migrate_and_rollback/"
     for i in range(3):
         swellow.up(
             db=db_backend[0],
-            directory=f"./tests/{db_backend[1]}/migrate_and_rollback",
+            directory=directory,
             engine=db_backend[1],
             json=True,
-            target_version_id=i+1
+            target_version_id=i+1,
+            no_transaction=flag_no_transaction,
         )
         swellow.down(
             db=db_backend[0],
-            directory=f"./tests/{db_backend[1]}/migrate_and_rollback",
+            directory=directory,
             engine=db_backend[1],
-            json=True
+            json=True,
+            no_transaction=flag_no_transaction,
         )
+
+# Test snapshot creation and accuracy
+def test_snapshot(db_backend):
+    # Start by setting up some resources for the snapshot to capture.
+    directory = f"./tests/{db_backend[1]}/snapshot/"
+    swellow.up(
+        db=db_backend[0],
+        directory=directory,
+        engine=db_backend[1],
+        json=True,
+        no_transaction=True,  # Required to CREATE DATABASE with Postgres
+    )
+
+    # Now create the snapshot.
+    swellow.snapshot(
+        db=db_backend[0],
+        directory=directory,
+        engine=db_backend[1],
+        json=True,
+    )
+
+    # Finally, verify the snapshot contents.
+    with open(f"{directory}3_snapshot/up.sql", "r") as f:
+        snapshot_sql = f.read()
+    
+    match db_backend[1]:
+        case "postgres":
+            assert "CREATE SCHEMA bird_watch" in snapshot_sql
+        case _:
+            assert "CREATE DATABASE bird_watch" in snapshot_sql
+
+    match db_backend[1]:
+        case "postgres":
+            assert "CREATE TABLE bird_watch.flock" in snapshot_sql
+        case "spark-delta":
+            assert "CREATE TABLE spark_catalog.bird_watch.flock" in snapshot_sql
+        case "spark-iceberg":
+            assert "CREATE TABLE local.bird_watch.flock" in snapshot_sql
+
+    # Clean up by destroying the snapshot.
+    import shutil
+    shutil.rmtree(directory + "3_snapshot")

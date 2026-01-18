@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS flock (
+CREATE TABLE IF NOT EXISTS bird_watch.flock (
     bird_id BIGINT,
     common_name STRING NOT NULL,
     latin_name STRING NOT NULL,

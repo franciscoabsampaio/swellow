@@ -1,1 +1,1 @@
-ALTER TABLE flock ADD COLUMN twigs_collected INTEGER;
+ALTER TABLE bird_watch.flock ADD COLUMN twigs_collected INTEGER;

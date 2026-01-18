@@ -1,4 +1,6 @@
-CREATE TABLE flock (
+CREATE SCHEMA bird_watch;
+
+CREATE TABLE bird_watch.flock (
     bird_id SERIAL PRIMARY KEY,
     common_name TEXT NOT NULL,
     latin_name TEXT NOT NULL,
