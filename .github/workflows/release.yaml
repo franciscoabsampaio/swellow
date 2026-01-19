@@ -58,7 +58,7 @@ jobs:
       contents: write  # needed to create releases
       id-token: write
     steps:
-      - name: Create draft release
+      - name: Promote draft release (set 'draft' to false)
         uses: softprops/action-gh-release@v2
         with:
           name: "${{ env.PROJECT_NAME }} v${{ needs.get-version.outputs.version }}"
