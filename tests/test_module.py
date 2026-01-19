@@ -16,9 +16,19 @@ def wait_for_log(container, message, timeout=30):
         time.sleep(0.5)
 
 
-@pytest.fixture(scope="function", params=["postgres", "spark-delta", "spark-iceberg"])
+@pytest.fixture(
+    scope="function",
+    params=[ # (engine, flag_no_transaction)
+        ("postgres", True),
+        ("postgres", False),
+        ("spark-delta", False),
+        ("spark-iceberg", False),
+    ],
+    # Set custom ids for better readability in test outputs
+    ids=lambda p: f"{p[0]}-no_tx={p[1]}",
+)
 def db_backend(request):
-    backend = request.param
+    backend = request.param[0]
 
     docker_client = docker.from_env()
 
@@ -50,7 +60,12 @@ def db_backend(request):
     else:
         raise ValueError(f"Unknown backend {backend}")
 
-    yield conn_url, backend
+    yield {
+        'conn_url': conn_url,
+        'directory': f"./tests/{backend}",
+        'engine': backend,
+        'flag_no_transaction': request.param[1],
+    }
 
     container.stop()
 
@@ -69,82 +84,82 @@ def test_no_connection():
 def test_missing_up(db_backend):
     with pytest.raises(SwellowFileNotFoundError):
         swellow.up(
-            db=db_backend[0],
-            directory=f"./tests/{db_backend[1]}/missing_up",
-            engine=db_backend[1],
+            db=db_backend['conn_url'],
+            directory=f"{db_backend['directory']}/missing_up",
+            engine=db_backend['engine'],
             json=True
         )
 
 # Test missing down.sql failure
 def test_missing_down(db_backend):
-    directory = f"./tests/{db_backend[1]}/missing_down/"
+    directory = f"{db_backend['directory']}/missing_down/"
     swellow.up(
-        db=db_backend[0],
+        db=db_backend['conn_url'],
         directory=directory,
-        engine=db_backend[1],
+        engine=db_backend['engine'],
         json=True
     )
     with pytest.raises(SwellowFileNotFoundError):
         swellow.down(
-            db=db_backend[0],
+            db=db_backend['conn_url'],
             directory=directory,
-            engine=db_backend[1],
+            engine=db_backend['engine'],
             json=True
         )
 
 # Test migration with rollback
-@pytest.mark.parametrize("flag_no_transaction", [True, False])
-def test_migrate_and_rollback(db_backend, flag_no_transaction):
+def test_migrate_and_rollback(db_backend):
     # Migrate and rollback to/from progressively higher versions.
-    directory = f"./tests/{db_backend[1]}/migrate_and_rollback/"
+    directory = f"{db_backend['directory']}/migrate_and_rollback/"
+
     for i in range(3):
         swellow.up(
-            db=db_backend[0],
+            db=db_backend['conn_url'],
             directory=directory,
-            engine=db_backend[1],
+            engine=db_backend['engine'],
             json=True,
             target_version_id=i+1,
-            no_transaction=flag_no_transaction,
+            no_transaction=db_backend['flag_no_transaction'],
         )
         swellow.down(
-            db=db_backend[0],
+            db=db_backend['conn_url'],
             directory=directory,
-            engine=db_backend[1],
+            engine=db_backend['engine'],
             json=True,
-            no_transaction=flag_no_transaction,
+            no_transaction=db_backend['flag_no_transaction'],
         )
 
 # Test snapshot creation and accuracy
 def test_snapshot(db_backend):
     # Start by setting up some resources for the snapshot to capture.
-    directory = f"./tests/{db_backend[1]}/snapshot/"
+    directory = f"{db_backend['directory']}/snapshot/"
     swellow.up(
-        db=db_backend[0],
+        db=db_backend['conn_url'],
         directory=directory,
-        engine=db_backend[1],
+        engine=db_backend['engine'],
         json=True,
         no_transaction=True,  # Required to CREATE DATABASE with Postgres
     )
 
     # Now create the snapshot.
     swellow.snapshot(
-        db=db_backend[0],
+        db=db_backend['conn_url'],
         directory=directory,
-        engine=db_backend[1],
+        engine=db_backend['engine'],
         json=True,
     )
 
     # Finally, verify the snapshot contents.
     with open(f"{directory}3_snapshot/up.sql", "r") as f:
         snapshot_sql = f.read()
-    
-    match db_backend[1]:
+
+    match db_backend['engine']:
         case "postgres":
             assert "CREATE SCHEMA bird_watch" in snapshot_sql
         case _:
             assert "CREATE DATABASE bird_watch" in snapshot_sql
 
-    match db_backend[1]:
+    match db_backend['engine']:
         case "postgres":
             assert "CREATE TABLE bird_watch.flock" in snapshot_sql
         case "spark-delta":
