@@ -59,6 +59,7 @@ impl From<&SwellowError> for SwellowErrorJson {
             }
             SwellowErrorKind::Parse(e) => match &e.kind {
                 ParseErrorKind::FileNotFound {..} => Self::FileNotFound { message: stderr },
+                ParseErrorKind::DuplicateVersionNumber(_) => Self::Version { message: stderr },
                 ParseErrorKind::InvalidDirectory(_) => Self::Io { message: stderr },
                 ParseErrorKind::InvalidVersionFormat(_) => Self::Version { message: stderr },
                 ParseErrorKind::InvalidVersionNumber(_) => Self::Version { message: stderr },

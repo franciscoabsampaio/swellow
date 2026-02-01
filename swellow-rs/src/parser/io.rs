@@ -35,57 +35,53 @@ pub fn collect_versions_from_directory(
         return Err(ParseError { kind: ParseErrorKind::InvalidDirectory(path.to_path_buf()) })
     }
 
-    // For each subdirectory, collect (version_name, version_id)
-    let versions = fs::read_dir(path)
-        .map_err(|e| {
-            ParseError { kind: ParseErrorKind::Io { path: path.to_path_buf(), source: Box::new(e) } }
-        })?
-        .filter_map(|entry| {
-            let entry = match entry {
-                Ok(dir) => dir,
-                Err(e) => {
-                    // Fatal: reading the directory failed.
-                    return Some(Err(
-                        ParseError { kind: ParseErrorKind::Io { path: path.to_path_buf(), source: Box::new(e) } }
-                    ));
-                }
-            };
+    let mut versions = BTreeMap::new();
 
-            let dir_path = entry.path();
-            if !dir_path.is_dir() {
-                tracing::debug!("Skipping non-directory: {:?}", dir_path);
-                return None;
-            }
+    // For each subdirectory, collect (version_id, full_path)
+    for entry in fs::read_dir(path).map_err(|e| {
+        ParseError { kind: ParseErrorKind::Io {
+            // Fatal: reading the directory failed.
+            path: path.to_path_buf(),
+            source: Box::new(e)
+        } }
+    })? {
+        let entry = entry.map_err(|e| {
+            ParseError { kind: ParseErrorKind::Io {
+                path: path.to_path_buf(),
+                source: Box::new(e)
+            }}
+        })?;
 
-            let dir_name = match dir_path.file_name().and_then(|s| s.to_str()) {
-                Some(s) => s.to_string(),
-                None => {
-                    // Fatal: invalid directory name.
-                    return Some(Err(
-                        ParseError { kind: ParseErrorKind::InvalidDirectory(dir_path) }
-                    ));
-                }
-            };
+        let dir_path = entry.path();
+        if !dir_path.is_dir() {
+            tracing::debug!("Skipping non-directory: {:?}", dir_path);
+            continue;
+        }
 
-            let version_id = match parse_id_from_version_name(&dir_name) {
-                Ok(id) => id,
-                Err(e) => {
-                    tracing::debug!("Skipping {:?}: failed to parse version ID: {}", dir_name, e);
-                    return None;
-                }
-            };
+        let dir_name = dir_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| ParseError {
+                // Fatal: invalid directory name.
+                kind: ParseErrorKind::InvalidDirectory(dir_path.clone())
+            })?
+            .to_string();
+        
+        let version_id = parse_id_from_version_name(&dir_name)?;
+        if version_id <= from_version_id || version_id > to_version_id {
+            tracing::debug!(
+                "Skipping version {} (out of range {}..{})",
+                version_id, from_version_id, to_version_id
+            );
+            continue;
+        }
 
-            if version_id <= from_version_id || version_id > to_version_id {
-                tracing::debug!(
-                    "Skipping version {} (out of range {}..{})",
-                    version_id, from_version_id, to_version_id
-                );
-                return None;
-            }
-
-            Some(Ok((version_id, path.join(&dir_name))))
-        })
-        .collect::<Result<BTreeMap<i64, PathBuf>, ParseError>>()?;
+        if versions.insert(version_id, dir_path).is_some() {
+            return Err(ParseError {
+                kind: ParseErrorKind::DuplicateVersionNumber(version_id)
+            });
+        }
+    }
 
     if versions.is_empty() && raise_if_empty {
         return Err(ParseError { kind: ParseErrorKind::NoMigrationsInRange(path.to_path_buf(), from_version_id, to_version_id) })

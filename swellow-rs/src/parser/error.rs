@@ -25,6 +25,7 @@ impl Error for ParseError {
 #[derive(Debug)]
 pub enum ParseErrorKind {
     FileNotFound(PathBuf),
+    DuplicateVersionNumber(i64),
     InvalidDirectory(PathBuf),
     InvalidVersionFormat(String),
     InvalidVersionNumber(String),
@@ -39,6 +40,7 @@ impl fmt::Display for ParseErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::FileNotFound(path) => write!(f, "File not found: '{path:?}'"),
+            Self::DuplicateVersionNumber(version) => write!(f, "More than one migration found with version: '{version}'"),
             Self::InvalidDirectory(path) => write!(f, "Directory does not exist or is not a directory: '{path:?}'"),
             Self::InvalidVersionFormat(version) => write!(f, "Invalid version format: '{version}'"),
             Self::InvalidVersionNumber(version) => write!(f, "Invalid version number: '{version}'"),
