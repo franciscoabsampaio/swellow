@@ -150,7 +150,7 @@ def test_snapshot(db_backend):
     )
 
     # Finally, verify the snapshot contents.
-    with open(f"{directory}3_snapshot/up.sql", "r") as f:
+    with open(f"{directory}000003_snapshot/up.sql", "r") as f:
         snapshot_sql = f.read()
 
     match db_backend['engine']:
@@ -169,4 +169,4 @@ def test_snapshot(db_backend):
 
     # Clean up by destroying the snapshot.
     import shutil
-    shutil.rmtree(directory + "3_snapshot")
+    shutil.rmtree(directory + "000003_snapshot")
