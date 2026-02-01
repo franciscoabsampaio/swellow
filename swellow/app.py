@@ -139,8 +139,13 @@ def up(
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    args = ["--db", db, "--dir", directory, "--engine", engine]
-
+    args = []
+    if db:
+        args.extend(["--db", db])
+    if directory:
+        args.extend(["--dir", directory])
+    if engine:
+        args.extend(["--engine", engine])
     if verbose:
         args.append(_parse_verbosity(verbose))
     if quiet:
@@ -195,8 +200,13 @@ def down(
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    args = ["--db", db, "--dir", directory, "--engine", engine]
-
+    args = []
+    if db:
+        args.extend(["--db", db])
+    if directory:
+        args.extend(["--dir", directory])
+    if engine:
+        args.extend(["--engine", engine])
     if verbose:
         args.append(_parse_verbosity(verbose))
     if quiet:
@@ -241,8 +251,13 @@ def peck(
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    args = ["--db", db, "--dir", directory, "--engine", engine]
-
+    args = []
+    if db:
+        args.extend(["--db", db])
+    if directory:
+        args.extend(["--dir", directory])
+    if engine:
+        args.extend(["--engine", engine])
     if verbose:
         args.append(_parse_verbosity(verbose))
     if quiet:
@@ -278,8 +293,13 @@ def snapshot(
     Returns:
         int: The return code from the swellow CLI process. Error handling is performed by the caller.
     """
-    args = ["--db", db, "--dir", directory, "--engine", engine]
-
+    args = []
+    if db:
+        args.extend(["--db", db])
+    if directory:
+        args.extend(["--dir", directory])
+    if engine:
+        args.extend(["--engine", engine])
     if verbose:
         args.append(_parse_verbosity(verbose))
     if quiet:

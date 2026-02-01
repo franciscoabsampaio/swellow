@@ -13,9 +13,9 @@ def main():
 
     parser = argparse.ArgumentParser(prog="swellow")
 
-    parser.add_argument("--db", required=True)
-    parser.add_argument("--dir", required=True)
-    parser.add_argument("--engine", required=False, default="postgres")
+    parser.add_argument("--db", required=False)
+    parser.add_argument("--dir", required=False)
+    parser.add_argument("--engine", required=False)
     parser.add_argument("-v", "--verbose", action="count", default=0)
     parser.add_argument("-q", "--quiet", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -29,18 +29,22 @@ def main():
     up_parser.add_argument("--target-version-id", type=int)
     up_parser.add_argument("--plan", action="store_true")
     up_parser.add_argument("--dry-run", action="store_true")
+    up_parser.add_argument("--no-transaction", action="store_true")
 
     down_parser = subparsers.add_parser("down")
     down_parser.add_argument("--current-version-id", type=int)
     down_parser.add_argument("--target-version-id", type=int)
     down_parser.add_argument("--plan", action="store_true")
     down_parser.add_argument("--dry-run", action="store_true")
+    down_parser.add_argument("--no-transaction", action="store_true")
 
     subparsers.add_parser("snapshot")
 
     args = parser.parse_args()
 
-    args.dir = str(Path(args.dir).resolve())
+    if args.dir:
+        # Resolve path if dir is provided
+        args.dir = str(Path(args.dir).resolve())
 
     try:
         if args.command == "peck":
