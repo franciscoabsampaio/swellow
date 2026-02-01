@@ -200,7 +200,7 @@ pub async fn snapshot(
         .fold(0, |acc, (v, _)| acc.max(*v) + 1);
 
     // Output snapshot SQL script to directory with updated version
-    let new_version_directory = Path::new(migration_dir).join(format!("{}_snapshot", new_version));
+    let new_version_directory = Path::new(migration_dir).join(format!("{:06}_snapshot", new_version));
     fs::create_dir_all(&new_version_directory)
         .map_err(|source| {
             SwellowError { kind: SwellowErrorKind::IoDirectoryCreate { source, path: new_version_directory.clone() } }
