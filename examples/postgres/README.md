@@ -64,7 +64,7 @@ docker run --name pg \
 ### Run the Python Example
 
 ```bash
-export DB_CONNECTION_STRING="postgresql://user:pass@10.0.0.1:5432/mydb"
+export DB_CONNECTION_STRING="postgresql://pguser:pgpass@localhost:5432/mydb"
 export MIGRATION_DIRECTORY="./migrations"
 
 python main.py
@@ -73,7 +73,7 @@ python main.py
 ### Run the CLI Example
 
 ```bash
-export DB_CONNECTION_STRING="postgresql://user:pass@10.0.0.1:5432/dbname"
+export DB_CONNECTION_STRING="postgresql://pguser:pgpass@localhost:5432/mydb"
 export MIGRATION_DIRECTORY="./migrations"
 bash ./main.sh
 ```
