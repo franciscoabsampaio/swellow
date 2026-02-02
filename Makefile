@@ -4,8 +4,8 @@ init:
 
 build:
 	cargo build
-	rm swellow/bin/swellow-linux-x86_64/swellow
-	cp target/debug/swellow /usr/local/bin/
+	rm -f swellow/bin/swellow-linux-x86_64/swellow
+	sudo cp target/debug/swellow /usr/local/bin/
 	cp target/debug/swellow swellow/bin/swellow-linux-x86_64/swellow
 	. venv/bin/activate && pip install .
 
