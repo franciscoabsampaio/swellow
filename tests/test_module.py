@@ -1,73 +1,31 @@
-import docker
 import pytest
-import time
 import swellow
-from swellow.app import SwellowEngineError, SwellowFileNotFoundError
+from swellow.app import SwellowEngineError, SwellowFileNotFoundError, SwellowVersionError
 
 
-def wait_for_log(container, message, timeout=30):
-    start = time.time()
-    while True:
-        logs = container.logs().decode("utf-8")
-        if message in logs:
-            return
-        if time.time() - start > timeout:
-            raise TimeoutError(f"Message '{message}' not found in logs")
-        time.sleep(0.5)
-
-
-@pytest.fixture(
-    scope="function",
-    params=[ # (engine, flag_no_transaction)
-        ("postgres", True),
-        ("postgres", False),
-        ("spark-delta", False),
-        ("spark-iceberg", False),
-    ],
-    # Set custom ids for better readability in test outputs
-    ids=lambda p: f"{p[0]}-no_tx={p[1]}",
-)
-def db_backend(request):
-    backend = request.param[0]
-
-    docker_client = docker.from_env()
-
-    if backend == "postgres":
-        image = docker_client.images.pull("postgres", tag="17.6")
-        container = docker_client.containers.run(
-            image,
-            detach=True,
-            environment={"POSTGRES_PASSWORD": "postgres"},
-            ports={'5432/tcp': 5432},
+@pytest.mark.parametrize("db_backend", [("postgres", True)], indirect=True)
+def test_invalid_version_number(db_backend):
+    directory = f"./tests/common/invalid_version_number/"
+    with pytest.raises(SwellowVersionError) as exc_info:
+        swellow.up(
+            db=db_backend['conn_url'],
+            directory=directory,
+            engine=db_backend['engine'],
+            json=True
         )
-        time.sleep(5)
-        conn_url = "postgresql://postgres:postgres@localhost:5432/postgres"
+    assert "Invalid version number" in str(exc_info.value)
 
-    elif backend in ["spark-delta", "spark-iceberg"]:
-        if backend == "spark-delta":
-            tag = 'delta'
-        else:
-            tag = 'iceberg'
-        image = docker_client.images.pull("franciscoabsampaio/spark-connect-server", tag=tag)
-        container = docker_client.containers.run(
-            image,
-            detach=True,
-            ports={'15002/tcp': 15002}
+@pytest.mark.parametrize("db_backend", [("postgres", True)], indirect=True)
+def test_migration_version_conflict(db_backend):
+    directory = f"./tests/common/migration_version_conflict/"
+    with pytest.raises(SwellowVersionError) as exc_info:
+        swellow.up(
+            db=db_backend['conn_url'],
+            directory=directory,
+            engine=db_backend['engine'],
+            json=True
         )
-        wait_for_log(container, message="Spark Connect server started at:")
-        conn_url = "sc://localhost:15002"
-
-    else:
-        raise ValueError(f"Unknown backend {backend}")
-
-    yield {
-        'conn_url': conn_url,
-        'directory': f"./tests/{backend}",
-        'engine': backend,
-        'flag_no_transaction': request.param[1],
-    }
-
-    container.stop()
+    assert "More than one migration found with version" in str(exc_info.value)
 
 # Test no connection returns an EngineError
 def test_no_connection():
@@ -108,12 +66,12 @@ def test_missing_down(db_backend):
         )
 
 # Test migration with rollback
-def test_migrate_and_rollback(db_backend):
+def test_migrate_and_rollback(db_backend, swellow_driver):
     # Migrate and rollback to/from progressively higher versions.
     directory = f"{db_backend['directory']}/migrate_and_rollback/"
 
     for i in range(3):
-        swellow.up(
+        swellow_driver.up(
             db=db_backend['conn_url'],
             directory=directory,
             engine=db_backend['engine'],
@@ -121,7 +79,7 @@ def test_migrate_and_rollback(db_backend):
             target_version_id=i+1,
             no_transaction=db_backend['flag_no_transaction'],
         )
-        swellow.down(
+        swellow_driver.down(
             db=db_backend['conn_url'],
             directory=directory,
             engine=db_backend['engine'],
