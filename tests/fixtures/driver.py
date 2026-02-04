@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from pathlib import Path
 import pytest
 import shutil
 import subprocess
@@ -61,7 +62,7 @@ class CliAdapter(SwellowInterface):
             cmd.append("--no-transaction")
 
         # Execute
-        print(f"DEBUG Executing: {' '.join(cmd)}")
+        print(f"[DEBUG] Executing: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.returncode != 0:
@@ -75,28 +76,64 @@ class CliAdapter(SwellowInterface):
 
 
 class PythonCliAdapter(CliAdapter):
-    """Invokes via `swellow`."""
+    """
+    Invokes the Python CLI.
+    1) Defaults to the 'venv/bin/swellow' binary (which runs the Python CLI);
+    2) Fallbacks to 'python -m swellow.cli' (which is what the Python CLI uses).
+    """
     def __init__(self):
-        super().__init__(["swellow"])
+        # 1. Default: Check venv/bin/swellow
+        venv_bin = Path(sys.executable).parent
+        swellow_bin = venv_bin / "swellow"
+
+        if swellow_bin.exists() and swellow_bin.is_file():
+            print(f"[DEBUG] Using venv CLI binary: {swellow_bin}")
+            super().__init__([str(swellow_bin)])
+            return
+
+        # 2. Fallback: python -m swellow.cli
+        try:
+            import swellow.cli  # noqa: F401
+            print("[DEBUG] Using python module fallback: python -m swellow.cli")
+            super().__init__([sys.executable, "-m", "swellow.cli"])
+            return
+        except ImportError:
+            pass
+
+        # 3. Nothing worked
+        raise RuntimeError(
+            "PythonCliAdapter: could not find venv 'swellow' binary "
+            "or import swellow.cli"
+        )
 
 
 class RustBinaryAdapter(CliAdapter):
-    """Invokes the raw Rust binary."""
+    """
+    Invokes the pre-built Rust binary.
+    1) Defaults to the '/usr/local/bin/swellow' binary.
+    2) Fallbacks to the bundled Python package binary.
+    """
     def __init__(self):
-        # 1. Try to find 'swellow' on the system PATH (e.g. /usr/local/bin)
-        binary = shutil.which("swellow")
-        
-        # 2. If not on PATH, try the binary bundled with the Python package
-        if not binary:
-            bundled = _swellow_bin()
-            if bundled.exists():
-                binary = str(bundled)
+        # 1. Default to '/usr/local/bin/swellow'
+        system_bin = Path("/usr/local/bin/swellow")
 
-        if not binary:
-            pytest.skip("Rust binary 'swellow' not found on PATH or in package.")
-        
-        super().__init__([binary])
+        if system_bin.exists() and system_bin.is_file():
+            print(f"[DEBUG] Using system Rust binary: {system_bin}")
+            super().__init__([str(system_bin)])
+            return
 
+        # 2. Fallback to bundled Python package binary
+        bundled = _swellow_bin()
+        if bundled and bundled.exists():
+            print(f"[DEBUG] Using bundled Rust binary: {bundled}")
+            super().__init__([str(bundled)])
+            return
+
+        # 3. Nothing worked
+        raise RuntimeError(
+            "RustBinaryAdapter: could not find 'swellow' in /usr/local/bin "
+            "or bundled Python package binary"
+        )
 
 # -----------------------------------------------------------------------------
 # Parametrized Fixture

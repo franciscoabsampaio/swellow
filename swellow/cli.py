@@ -63,3 +63,6 @@ def main():
         return_code = getattr(e, "exit_code", 1)
     finally:
         sys.exit(return_code)
+
+if __name__ == "__main__":
+    main()
