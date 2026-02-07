@@ -2,6 +2,10 @@
 
 `swellow` is the simple, SQL-first tool for managing table migrations, written in Rust.
 
+## Built For Your Data Flock
+
+![The data flock.](docs/data_flock.png)
+
 ## Why Swellow?
 
 **If you can write SQL for your database, you already know how to use `swellow`**.
