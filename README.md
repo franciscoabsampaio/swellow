@@ -188,6 +188,10 @@ If you wish to start tracking the database in CI, [take a snapshot](#taking-snap
 
 If a `swellow.records` table already exists in the target database, the latest migration version in its active records (a record is active if it has a status of `APPLIED` or `TESTED`) will be assumed as the current version. This can easily be overriden by specifying the `current_version` argument, or changing the versions in migrations directory to be larger.
 
+## Examples
+
+Refer to the [`examples` directory in this repository](https://github.com/franciscoabsampaio/swellow/tree/main/examples) for examples on how to use `swellow` with your data flock.
+
 ## CLI Reference
 
 `swellow --help` will show you all commands and options available.
