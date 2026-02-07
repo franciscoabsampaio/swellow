@@ -232,4 +232,3 @@ Options:
 © 2025 Francisco A. B. Sampaio. Licensed under the MIT License.
 
 This project is not affiliated with, endorsed by, or sponsored by the Apache Software Foundation.
-*/
