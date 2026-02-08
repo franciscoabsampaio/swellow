@@ -1,0 +1,1 @@
+ALTER TABLE bird_watch.flock DROP COLUMN twigs_collected;

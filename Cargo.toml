@@ -1,27 +1,18 @@
-[package]
-name = "swellow"
-version = "0.1.2"
+[workspace]
+members = [
+    "swellow-rs",
+]
+
+[workspace.package]
+authors = ["Francisco A. B. Sampaio <franciscoabsampaio@gmail.com>"]
 edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/franciscoabsampaio/swellow"
 
-# [lib]
-# name = "swellow"
-# path = "src/lib.rs"
-# crate-type = ["cdylib", "rlib"]
-
-[[bin]]
-name = "swellow"
-path = "src/main.rs"
-
-[dependencies]
-clap = { version = "4.5", features = ["derive", "env"] }
-phf = { version = "0.13.1", features = ["macros"] }
-# pyo3 = { version = "0.26", features = ["extension-module", "experimental-async"] }
-# pyo3-async-runtimes = { version = "0.26.0", features = ["tokio-runtime"] }
-sha2 = "0.10"
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "macros"] }
-sqlparser = "0.58"
+[workspace.dependencies]
+arrow = { version = "56.2.0", default-features = false }
 tokio = { version = "1.47", features = ["rt-multi-thread", "macros"] }
-tracing = "0.1"
+tracing = "0.1.41"
 tracing-subscriber = "0.3"
 
 [profile.release]
