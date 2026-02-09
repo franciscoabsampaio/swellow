@@ -170,7 +170,7 @@ Behind the scenes, all migration commands start by running `peck`, making it, in
 
 **⚠️ `swellow snapshot` does not save any data.** It is aimed at cleaning up directories filled with old migrations and combining them into a current definition of the database. The `snapshot` command/function scans the database and creates an `up.sql` script with everything needed to create all relations in the database.
 
-In line with swellow's 'SQL-first' design philosophy In designing swellow, we believe that native options should be used when available (e.g. `pg_dump` for PostgreSQL). Unfortunately, this can make snapshotting behaviour *very inconsistent across databases*. On the upside, snapshots are completely harmless.
+In line with swellow's 'SQL-first' design philosophy, we believe that native options should be used when available (e.g. `pg_dump` for PostgreSQL). Unfortunately, this can make snapshotting behaviour *very inconsistent across databases*. On the upside, snapshots are completely harmless.
 
 Here's a quick reference to what snapshotting does for each database:
 
