@@ -1,1 +1,0 @@
-ALTER TABLE bird_watch.flock ADD COLUMN twigs_collected INTEGER;

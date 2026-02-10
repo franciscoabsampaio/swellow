@@ -1,1 +1,0 @@
-DROP TABLE bird_watch.flock;
