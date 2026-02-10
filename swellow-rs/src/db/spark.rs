@@ -1,5 +1,5 @@
 use crate::db::{DbEngine, EngineError, error::EngineErrorKind, sql_common};
-use crate::db::arrow_utils::get_column;
+use crate::db::arrow_utils::{ get_column, get_column_by_name, get_first_string };
 use arrow;
 use arrow::array::{
     Array,
@@ -11,37 +11,32 @@ use arrow::array::{
     StringArray,
     StructArray
 };
-use arrow::datatypes::{DataType, Int32Type, Int64Type};
+use arrow::datatypes::{Int32Type, Int64Type};
 use spark_connect as spark;
 use std::fmt::Write;
 use std::vec;
 
+
 /// Helper: Parses the "DESCRIBE TABLE" output to build column definitions
 /// Input batch columns: [col_name, data_type, comment]
 fn build_schema_string(batch: &RecordBatch) -> Result<String, EngineError> {
-    let col_names = get_column::<StringArray>(
-        batch, 0, DataType::Utf8
-    )?;
-    let data_types = get_column::<StringArray>(
-        batch, 0, DataType::Utf8
-    )?;
-    let comments = get_column::<StringArray>(
-        batch, 0, DataType::Utf8
+    let col_name = get_first_string(batch, "col_name")?;
+    let data_type = get_first_string(batch, "data_type")?;
+    let comments = get_column_by_name::<StringArray>(
+        batch, "comment"
     )?;
 
     let mut schema_str = String::from("(");
+    let num_rows = batch.num_rows();
 
     // Iterate through each row to build each column's definition
-    for i in 0..batch.num_rows() {
+    for i in 0..num_rows {
         if i > 0 {
             schema_str.push_str(", ");
         }
 
-        let name = col_names.value(i);
-        let dtype = data_types.value(i);
-        
         // Basic format: "col_name data_type"
-        write!(&mut schema_str, "{} {}", name, dtype)?;
+        write!(&mut schema_str, "{} {}", col_name, data_type)?;
 
         // Add comment if it exists and is not null
         if comments.is_valid(i) {
@@ -53,6 +48,7 @@ fn build_schema_string(batch: &RecordBatch) -> Result<String, EngineError> {
     }
 
     schema_str.push(')');
+
     Ok(schema_str)
 }
 
@@ -60,6 +56,7 @@ fn build_schema_string(batch: &RecordBatch) -> Result<String, EngineError> {
 /// Catalog type for ODBC engines
 #[derive(Clone, Copy)]
 pub enum SparkCatalog {
+    DatabricksDelta,
     Delta,
     Iceberg,
 }
@@ -70,7 +67,6 @@ pub enum SparkCatalog {
 pub struct SparkEngine {
     catalog: SparkCatalog,
     session: spark::SparkSession,
-    // snapshot: 
 }
 
 impl SparkEngine {
@@ -83,7 +79,7 @@ impl SparkEngine {
 
     fn using_clause(&self) -> &str {
         match self.catalog {
-            SparkCatalog::Delta => "delta",
+            SparkCatalog::Delta | SparkCatalog::DatabricksDelta => "delta",
             SparkCatalog::Iceberg => "iceberg",
         }
     }
@@ -99,7 +95,7 @@ impl SparkEngine {
 
         for batch in &batches {
             let column = get_column::<StringArray>(
-                batch, column_index, DataType::Utf8
+                batch, column_index
             )?
                 .iter()
                 .flatten()
@@ -117,6 +113,7 @@ impl SparkEngine {
         db: &str,
         table: &str,
     ) -> Result<String, EngineError> {
+        // ---------------------------------------
         // 0. Fetch DESCRIBE TABLE and DESCRIBE DETAIL info from Spark
         let describe_table_batch = &self.sql(
             &format!("DESCRIBE TABLE {db}.{table}")
@@ -125,56 +122,70 @@ impl SparkEngine {
             &format!("DESCRIBE DETAIL {db}.{table}")
         ).await?[0];
 
+        // ---------------------------------------
         // 1. If we have a schema batch, format it (e.g., "(id int, name string)")
         // Otherwise, we leave it empty (Spark will infer schema from Location)
         let schema_def = build_schema_string(&describe_table_batch)?;
 
+        // ---------------------------------------
         // 2. Parse DESCRIBE DETAIL output for table properties
-        let table_name = get_column::<StringArray>(
-            describe_detail_batch, 2, DataType::Utf8,
-        )?.value(0);
-        let location = get_column::<StringArray>(
-            describe_detail_batch, 4, DataType::Utf8,
-        )?.value(0);
-        let partition_columns_array = get_column::<ListArray>(
-            describe_detail_batch, 7, DataType::Utf8,
-        )?.value(0);
-        let properties_array = get_column::<MapArray>(
-            describe_detail_batch, 11, DataType::Utf8,
-        )?.value(0);
+        // Note: Column 2 is Name, Column 4 is Location (in standard Spark Delta describe)
+        let table_name = get_first_string(describe_detail_batch, "name")?;
+        let location = get_first_string(describe_detail_batch, "location")?;
 
-        // Parsing Partitions
-        let partitions: Vec<String> = match partition_columns_array
-            .as_any()
-            .downcast_ref::<StringArray>() {
-                Some(arr) => arr
-                    .iter()
-                    .filter_map(|opt| opt.map(|s| s.to_string()))
-                    .collect(),
-                None => vec![],
-            };
+        // 2.1. Partitions
+        let partitions: Vec<String> = {
+            let column_partition_columns = get_column_by_name::<ListArray>(
+                describe_detail_batch, "partitionColumns"
+            )?;
 
-        // Parsing Properties
+            if column_partition_columns.is_valid(0) {
+                let value_slice = column_partition_columns.value(0);
+
+                match value_slice.as_any().downcast_ref::<StringArray>() {
+                    Some(string_arr) => string_arr
+                        .iter()
+                        .filter_map(|s| s.map(|inner| inner.to_string()))
+                        .collect(),
+                    None => vec![], // Could not cast inner list to StringArray
+                }
+            } else {
+                vec![] // No partitions
+            }
+        };
+
+        // 2.2. Table Properties
         let mut tbl_properties = Vec::new();
-        let map = properties_array.as_any()
-            .downcast_ref::<StructArray>();
-        let keys = get_column::<StringArray>(
-            describe_detail_batch, 0, DataType::Utf8,
+
+        let column_properties = get_column_by_name::<MapArray>(
+            describe_detail_batch, "properties"
         )?;
-        let values = get_column::<StringArray>(
-            describe_detail_batch, 1, DataType::Utf8,
-        )?;
-        
-        if let Some(map) = map {
-            for i in 0..map.len() {
-                if keys.is_valid(i) && values.is_valid(i) {
-                    tbl_properties.push(format!("'{}'='{}'", keys.value(i), values.value(i)));
+
+        if column_properties.is_valid(0) {
+            let entry = column_properties.value(0);
+
+            if let Some(struct_array) = entry.as_any().downcast_ref::<StructArray>() {
+                // The StructArray inside a Map always has 2 columns: 0 (keys) and 1 (values)
+                let keys_col = struct_array.column(0);
+                let values_col = struct_array.column(1);
+            
+                // Downcast the keys and values to StringArrays
+                if let (Some(keys), Some(values)) = (
+                    keys_col.as_any().downcast_ref::<StringArray>(),
+                    values_col.as_any().downcast_ref::<StringArray>()
+                ) {
+                    // Iterate over the PROPERTIES
+                    for i in 0..keys.len() {
+                        if keys.is_valid(i) && values.is_valid(i) {
+                            tbl_properties.push(format!("'{}'='{}'", keys.value(i), values.value(i)));
+                        }
+                    }
                 }
             }
         }
-
-        // --- Updated Statement Construction ---
-        // Injects `schema_def` between table name and USING DELTA
+        
+        // ---------------------------------------
+        // 3. Construct the CREATE TABLE statement
         let mut stmt = format!(
             "CREATE TABLE {} {} USING {} LOCATION '{}'", 
             table_name, schema_def, self.using_clause(), location
@@ -194,7 +205,6 @@ impl SparkEngine {
     async fn fetch_optional_int<T>(
         &mut self,
         sql: &str,
-        data_type: DataType,
     ) -> Result<Option<T::Native>, EngineError>
     where
         T: ArrowPrimitiveType,
@@ -207,7 +217,7 @@ impl SparkEngine {
         };
 
         let col: &PrimitiveArray<T> =
-            get_column(first_batch, 0, data_type)?;
+            get_column(first_batch, 0)?;
 
         if col.is_empty() || col.is_null(0) {
             return Ok(None);
@@ -246,14 +256,12 @@ impl DbEngine for SparkEngine {
     async fn fetch_latest_applied_version(&mut self) -> Result<Option<i64>, EngineError> {
         self.fetch_optional_int::<Int64Type>(
             sql_common::QUERY_LATEST_VERSION,
-            DataType::Int64
         ).await
     }
 
     async fn acquire_lock(&mut self) -> Result<(), EngineError> {
         if self.fetch_optional_int::<Int32Type>(
             sql_common::QUERY_LOCK_EXISTS,
-            DataType::Int64
         ).await?.is_some() {
             return Err(EngineError { kind: EngineErrorKind::LockConflict })
         }
@@ -381,29 +389,86 @@ impl DbEngine for SparkEngine {
     async fn snapshot(&mut self) -> Result<String, EngineError> {
         let mut snapshot_string: String = String::new();
 
-        // 1: Get all databases
-        let db_names: Vec<String> = self.fetch_column_of_strings("SHOW DATABASES", 0).await?;
+        // 1: Fetch all relevant tables and their types in one go
+        let batches = self.sql("
+            SELECT table_schema, table_name, table_type 
+            FROM information_schema.tables 
+            WHERE table_schema NOT IN ('information_schema', 'sys')
+            ORDER BY table_schema, table_name
+        ").await?;
 
-        // 2: Iterate over databases
-        for db in db_names {
-            // Add CREATE DATABASE statement
-            snapshot_string = format!("{snapshot_string}CREATE DATABASE {db};\n\n");
+        // Keep track of current schema.
+        // Since we're ORDERing BY the schema,
+        // we go over each schema and 
+        let mut current_db = String::new();
 
-            // 3. Get tables in this database
-            let table_names: Vec<String> = self.fetch_column_of_strings(
-                // Get the second column which contains table names
-                &format!("SHOW TABLES IN {db}"), 1
-            ).await?;
+        // 2: Iterate over every batch
+        for batch in batches {
+            // Extract columns
+            let column_db = get_column_by_name::<StringArray>(
+                &batch, "table_schema"
+            )?;
+            let column_table = get_column_by_name::<StringArray>(
+                &batch, "table_name"
+            )?;
+            let column_table_type = get_column_by_name::<StringArray>(
+                &batch, "table_type"
+            )?;
 
-            // 4: For each table, get CREATE statement
-            for table in table_names {
-                let stmt = match self.catalog {
-                    SparkCatalog::Delta => self.generate_create_table_statement(&db, &table).await?,
-                    SparkCatalog::Iceberg => self.fetch_column_of_strings(
-                        &format!("SHOW CREATE TABLE {db}.{table}"), 0
-                    ).await?[0].clone(),
+            // 3: Iterate over rows in batch
+            for row in 0..batch.num_rows() {
+                // Skip if any value is null, since .value() panics
+                if column_db.is_null(row)
+                    || column_table.is_null(row)
+                    || column_table_type.is_null(row)
+                {
+                    continue;
+                }
+
+                let db = column_db.value(row);
+                let table = column_table.value(row);
+                let table_type = column_table_type.value(row);
+
+                // CREATE DATABASE if it's the first time we find it in the list
+                if db != current_db {
+                    snapshot_string.push_str(&format!("CREATE DATABASE IF NOT EXISTS {db};\n\n"));
+                    current_db = db.to_string();
+                }
+
+                // 5. Generate Table/View Creation Statement
+                // a) Try SHOW CREATE TABLE first
+                let show_create_result = self.fetch_column_of_strings(
+                    &format!("SHOW CREATE TABLE {db}.{table}"),
+                    0
+                ).await;
+
+                let stmt = match show_create_result {
+                    Ok(cols) if !cols.is_empty() => cols[0].clone(),
+                    Ok(_) => return Err(EngineError {
+                        kind: EngineErrorKind::InvalidSchema {
+                            stderr: format!(
+                                "'SHOW CREATE TABLE {db}.{table}' returned an empty result"
+                            ),
+                        },
+                    }),
+                    // b) DatabricksDelta and SparkIceberg support SHOW CREATE TABLE for views,
+                    // so it shouldn't have failed.
+                    Err(err) if matches!(
+                        self.catalog, SparkCatalog::DatabricksDelta | SparkCatalog::Iceberg
+                    ) => {
+                        return Err(err);
+                    },
+                    // c) If it is a VIEW, skip,
+                    // because the CREATE statement cannot be faithfully generated.
+                    Err(_) if table_type.contains("VIEW") => {
+                        continue;
+                    },
+                    // d) If it is a TABLE and the catalog isn't Databricks,
+                    // manually generate the table statement.
+                    Err(_) => self.generate_create_table_statement(&db, &table).await?,
                 };
-                snapshot_string = format!("{snapshot_string}{stmt};\n\n");
+
+                snapshot_string.push_str(&format!("{stmt};\n\n"));
             }
         }
 

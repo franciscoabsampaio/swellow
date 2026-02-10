@@ -350,7 +350,7 @@ impl DbEngine for PostgresEngine {
                 .map_err(|e| EngineError { kind: EngineErrorKind::Utf8(e) })?;
 
             Err(EngineError {
-                kind: EngineErrorKind::PGDump(stderr),
+                kind: EngineErrorKind::PGDump { stderr },
             })
         }
     }

@@ -28,14 +28,24 @@ pub enum EngineErrorKind {
         column_index: usize,
         num_columns: usize,
     },
+    ColumnNotFound { column_name: String },
     ColumnTypeMismatch {
         column_index: usize,
-        expected: DataType,
+        // An alternative would be to create a custom trait
+        // that could yield the type's DATA_TYPE.
+        // But that is a bit too much work:
+        // - For primitive type, it can be easily implemented;
+        // - But for nested types, like lists and maps,
+        //   it is quite complex to manage.
+        // Since the purpose of these error classes and kinds
+        // is to improve error tracing, a static string suffices.
+        expected: &'static str,
         found: DataType,
     },
     Fmt(std::fmt::Error),
+    InvalidSchema { stderr: String },
     LockConflict,
-    PGDump(String),
+    PGDump { stderr: String },
     Process{ source: std::io::Error, cmd: String },
     Spark(spark_connect::SparkError),
     SQLX(sqlx::Error),
@@ -49,12 +59,14 @@ impl fmt::Display for EngineErrorKind {
             Self::ColumnIndexOutOfBounds { column_index, num_columns } => {
                 write!(f, "Column index {column_index} is out of bounds (number of columns: {num_columns})")
             },
+            Self::ColumnNotFound { column_name } => write!(f, "Column not found: {column_name}"),
             Self::ColumnTypeMismatch { column_index, expected, found } => {
-                write!(f, "Column {column_index} has mismatched type: expected {expected}, found {found}")
+                write!(f, "Column {column_index} has mismatched type: expected {expected} found {found}")
             },
             Self::Fmt(e) => write!(f, "Formatting error: {e}"),
+            Self::InvalidSchema { stderr } => write!(f, "Invalid schema: {stderr}"),
             Self::LockConflict => write!(f, "Lock acquisition failed - lock record is taken"),
-            Self::PGDump(stderr) => write!(f, "pg_dump failed: '{stderr}'"),
+            Self::PGDump { stderr } => write!(f, "pg_dump failed: '{stderr}'"),
             Self::Process{cmd, .. } => write!(f, "Failed to run a command: '{cmd}'"),
             Self::SQLX(e) => write!(f, "{e}"),
             Self::Spark(e) => write!(f, "1{e}"),
@@ -106,13 +118,13 @@ mod tests {
             (
                 EngineErrorKind::ColumnTypeMismatch {
                     column_index: 1,
-                    expected: DataType::Int64,
+                    expected: "StringArray",
                     found: DataType::Utf8,
                 },
                 "Column 1 has mismatched type",
             ),
             (EngineErrorKind::LockConflict, "Lock acquisition failed"),
-            (EngineErrorKind::PGDump("Big mistake".to_string()), "pg_dump failed"),
+            (EngineErrorKind::PGDump { stderr: "Big mistake".to_string() }, "pg_dump failed"),
             (EngineErrorKind::SQLX(sqlx::Error::RowNotFound), "no rows returned"),
         ];
 
