@@ -1,5 +1,7 @@
 # Swellow 🐦‍⬛
 
+![Take flight with `swellow`!](./docs/banner_16_9.png)
+
 `swellow` is the simple, SQL-first tool for managing table migrations, written in Rust.
 
 ## Built For Your Data Flock
@@ -16,11 +18,11 @@ There is:
 
 - ❌ **No** generated SQL;
 - ❌ **No** implicit transformations;
-- ❌ **No** migration logic hidden from the user.
+- ❌ **No** migration logic hidden from the user;
 
-What runs is *exactly* what you wrote, using **your database’s native syntax**.
+✅ What runs is *exactly* what you wrote, using **your database’s native syntax**.
 
-This makes migrations **transparent**, **predictable**, and **safe**, because knowing what runs in production matters more than convenient abstractions.
+✅ This makes migrations **transparent**, **predictable**, and **safe**, because knowing what runs in production matters more than convenient abstractions.
 
 **If you want a migration tool that stays out of your way and treats SQL as the source of truth, `swellow` is for you.**
 
