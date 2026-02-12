@@ -17,7 +17,7 @@ clap = { version = "4.5", features = ["derive", "env"] }
 chrono = { version = "0.4.42", features = ["serde"] }
 odbc-api = "19.0.2"
 phf = { version = "0.13.1", features = ["macros"] }
-spark-connect = { version = "0.2.1", features = ["chrono", "tls"] }
+spark-connect = { version = "0.2.2", features = ["chrono", "tls"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "macros"] }
 sqlparser = "0.58"
 tokio = { workspace = true }
