@@ -1,5 +1,11 @@
 # Swellow 🐦‍⬛
 
+[![PyPI version](https://badge.fury.io/py/swellow.svg)](https://badge.fury.io/py/swellow)
+[![Release](https://github.com/franciscoabsampaio/swellow/actions/workflows/release.yaml/badge.svg)](https://github.com/franciscoabsampaio/swellow/actions/workflows/release.yaml)
+[![Crates.io](https://img.shields.io/crates/v/swellow.svg)](https://crates.io/crates/swellow)
+[![Docs.rs](https://docs.rs/swellow/badge.svg)](https://docs.rs/swellow)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ![Take flight with `swellow`!](./docs/banner_16_9.png)
 
 `swellow` is the simple, SQL-first tool for managing table migrations, written in Rust.
