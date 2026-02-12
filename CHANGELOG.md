@@ -7,40 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.2.0](https://github.com/franciscoabsampaio/swellow/releases/tag/v0.2.0) - 2025-02-14
+
 ### Added
 
 - `CHANGELOG.md`!
-
-## [0.2.2](https://github.com/franciscoabsampaio/spark-connect/releases/tag/v0.2.2) - 2025-02-12
-
-### Changed
-
-- Build script now uses vendored protobuf-compiler, no longer requiring users to manually install it.
-
-## [0.2.1](https://github.com/franciscoabsampaio/spark-connect/releases/tag/v0.2.1) - 2025-01-22
-
-### Added
-
-- Databricks example.
+- Support for multiple engines and catalogs, namely Apache Spark with Delta and Iceberg catalogs.
+- JSON interface with custom errors.
+- Secondary lock for concurrency management, and CLI flag `--ignore-locks`.
+- Log timestamps.
+- Publish Rust binary crate, with API and docs.
+- Non-affiliation disclaimer to project README.
+- Examples for PostgreSQL and Databricks with Delta.
 
 ### Changed
 
-- Fix TLS.
-- Enforce SSL if `token` header is used.
-- Enforce lower case in HTTP headings.
+- Extensive refactoring.
+- Remove dependency on `testcontainers`, use `docker` package instead.
+- Pad migration version directories with 0s.
+- Update license to MIT license.
+- Switch from SLSA3 provenance to GitHub's native attestation.
 
-## [0.2.0](https://github.com/franciscoabsampaio/spark-connect/releases/tag/v0.2.0) - 2025-01-10
+### Removed
+
+- `anyhow` in favour of explicit errors and better error handling.
+- All [panicking](https://doc.rust-lang.org/rust-by-example/std/panic.html) code.
+
+## [0.1.2](https://github.com/franciscoabsampaio/swellow/releases/tag/v0.1.2) - 2025-09-27
 
 ### Changed
 
-- Standardize protobuf directory to support different versions of Spark.
+- Compile Rust binary with msvc instead of mingw.
 
-## [0.1.1](https://github.com/franciscoabsampaio/spark-connect/releases/tag/v0.1.1) - 2025-09-27
-
-### Changed
-
-- Remove explicit dependency on arrow_ipc (use feature instead).
-
-## [0.1.0](https://github.com/franciscoabsampaio/swellow/releases/tag/v0.1.0) - 2025-09-26
+## [0.1.1](https://github.com/franciscoabsampaio/swellow/releases/tag/v0.1.1) - 2025-09-26
 
 - Initial release.
