@@ -1,12 +1,12 @@
-# Example: Postgres
+# Examples
 
-This example demonstrates how to use Swellow to manage schema migrations against a PostgreSQL database, using both the CLI and the Python interface.
+This directory houses a number of examples that demonstrate how to use Swellow to manage schema migrations against different databases / datalakes, using both the CLI and the Python interface.
 
-The example walks through a realistic migration workflow, starting from a fresh database and progressing through planning, execution, validation, and rollback planning.
+Each example walks through a realistic migration workflow, starting from a fresh catalog and progressing through planning, execution, validation, and rollback planning.
 
-## What this example shows
+## What each example shows
 
-This example exercises the most common Swellow workflows in a single, linear script:
+Most examples follow the same linear script:
 
 1. **Connectivity check.** Verifies that Swellow can connect to the database before performing any migrations.
 
@@ -16,7 +16,7 @@ This example exercises the most common Swellow workflows in a single, linear scr
 
 4. **Incremental schema evolution.** Applies multiple migrations step by step to evolve the schema.
 
-5. **Dry-run validation.** Executes a migration inside a transaction and rolls it back, allowing you to safely test complex or risky changes.
+5. **Dry-run validation.** Executes a migration inside a transaction and rolls it back, allowing you to safely test complex or risky changes. ⚠️ *Databases that do not support dry-runs skip this step.*
 
 6. **Applying a tested migration.** Runs the previously dry-tested migration for real.
 
@@ -28,7 +28,7 @@ Together, these steps demonstrate how Swellow can be used throughout the full li
 
 ### Expected result
 
-After running the example successfully:
+After running an example successfully:
 
 - The database schema will be migrated up to version 5;
 - All migrations up to that version will be marked as applied;
@@ -49,6 +49,10 @@ Both approaches run the same engine under the hood and should produce equivalent
 
 ### Prerequisites
 
+A virtual environment with `swellow` installed must be activated.
+
+#### PostgreSQL
+
 `swellow` uses [`pg_dump`](https://www.postgresql.org/docs/current/app-pgdump.html) when taking schema snapshots on PostgreSQL. To use the `snapshot` command, `pg_dump` must be installed locally and its version should match the PostgreSQL server version.
 
 For setting up a PostgreSQL database for testing, you can use Docker:
@@ -61,11 +65,18 @@ docker run --name pg \
     -p 5432:5432 -d postgres
 ```
 
+#### Databricks
+
+An existing account with a databricks workspace is required.
+
+Free accounts can be used, but clusters are not available for use. This means the `x-databricks-cluster-id` header cannot be used to connect to the databricks runtime. If you still want to try it out, you can use the `x-databricks-session-id` header instead, which requires no functioning cluster. In order to retrieve a valid session ID, try running `swellow peck` against databricks with an invalid session ID. The error return message will come with a valid session ID. **This is not advised in production.**
+
 ### Run the Python Example
 
 ```bash
-export DB_CONNECTION_STRING="postgresql://pguser:pgpass@localhost:5432/mydb"
-export MIGRATION_DIRECTORY="./migrations"
+# Set all required environment variables
+export <ENVIRONMENT_VARIABLE>="<VALUE>"
+# ...
 
 python main.py
 ```
@@ -73,14 +84,17 @@ python main.py
 ### Run the CLI Example
 
 ```bash
-export DB_CONNECTION_STRING="postgresql://pguser:pgpass@localhost:5432/mydb"
-export MIGRATION_DIRECTORY="./migrations"
+# Set all required environment variables
+export <ENVIRONMENT_VARIABLE>="<VALUE>"
+# ...
 bash ./main.sh
 ```
 
 ### Verifying Results
 
 Running the example will quickly output a series of logs indicating the progress of each step. Take your time to read through them to understand what `swellow` is doing at each stage.
+
+#### PostgreSQL
 
 You can easily verify the final state of the database using `psql` or any PostgreSQL client. For example, to check the applied migrations:
 
@@ -89,3 +103,7 @@ psql postgresql://pguser:pgpass@localhost:5432/mydb \
     -P pager=off \
     -c "SELECT * FROM swellow.records ORDER BY version_id;"
 ```
+
+#### Databricks
+
+Log in to databricks, look around the catalog, and try querying the newly created tables.
