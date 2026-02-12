@@ -6,7 +6,7 @@ members = [
 [workspace.package]
 authors = ["Francisco A. B. Sampaio <franciscoabsampaio@gmail.com>"]
 edition = "2024"
-license = "Apache-2.0"
+license = "MIT"
 repository = "https://github.com/franciscoabsampaio/swellow"
 
 [workspace.dependencies]
