@@ -114,6 +114,8 @@ def test_snapshot(db_backend):
     match db_backend['engine']:
         case "postgres":
             assert "CREATE SCHEMA bird_watch" in snapshot_sql
+        case "databricks-delta":
+            assert "CREATE DATABASE IF NOT EXISTS bird_watch" in snapshot_sql
         case _:
             assert "CREATE DATABASE bird_watch" in snapshot_sql
 
@@ -124,6 +126,9 @@ def test_snapshot(db_backend):
             assert "CREATE TABLE spark_catalog.bird_watch.flock" in snapshot_sql
         case "spark-iceberg":
             assert "CREATE TABLE local.bird_watch.flock" in snapshot_sql
+
+    # TODO: Test if VIEWS are snapshotted.
+    # TODO: Test if system schemas are ignored.
 
     # Clean up by destroying the snapshot.
     import shutil
