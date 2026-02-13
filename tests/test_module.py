@@ -91,6 +91,7 @@ def test_migrate_and_rollback(db_backend, swellow_driver):
 def test_snapshot(db_backend):
     # Start by setting up some resources for the snapshot to capture.
     directory = f"{db_backend['directory']}/snapshot/"
+    engine = db_backend['engine']
     swellow.up(
         db=db_backend['conn_url'],
         directory=directory,
@@ -111,21 +112,19 @@ def test_snapshot(db_backend):
     with open(f"{directory}000003_snapshot/up.sql", "r") as f:
         snapshot_sql = f.read()
 
-    match db_backend['engine']:
-        case "postgres":
-            assert "CREATE SCHEMA bird_watch" in snapshot_sql
-        case "databricks-delta":
-            assert "CREATE DATABASE IF NOT EXISTS bird_watch" in snapshot_sql
-        case _:
-            assert "CREATE DATABASE bird_watch" in snapshot_sql
+    if engine == "postgres":
+        assert "CREATE SCHEMA bird_watch" in snapshot_sql
+    elif engine == "databricks-delta":
+        assert "CREATE DATABASE IF NOT EXISTS bird_watch" in snapshot_sql
+    else:
+        assert "CREATE DATABASE bird_watch" in snapshot_sql
 
-    match db_backend['engine']:
-        case "postgres":
-            assert "CREATE TABLE bird_watch.flock" in snapshot_sql
-        case "spark-delta":
-            assert "CREATE TABLE spark_catalog.bird_watch.flock" in snapshot_sql
-        case "spark-iceberg":
-            assert "CREATE TABLE local.bird_watch.flock" in snapshot_sql
+    if engine == "postgres":
+        assert "CREATE TABLE bird_watch.flock" in snapshot_sql
+    elif engine == "spark-delta":
+        assert "CREATE TABLE spark_catalog.bird_watch.flock" in snapshot_sql
+    elif engine == "spark-iceberg":
+        assert "CREATE TABLE local.bird_watch.flock" in snapshot_sql
 
     # TODO: Test if VIEWS are snapshotted.
     # TODO: Test if system schemas are ignored.
