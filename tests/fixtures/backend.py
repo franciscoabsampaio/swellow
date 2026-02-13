@@ -1,8 +1,13 @@
 import docker
 import os
+from pathlib import Path
 import pytest
 import swellow
 import time
+
+
+def get_pg_version_from_file(path="PG_VERSION"):
+    return Path(path).read_text().strip()
 
 
 def wait_for_log(container, message, timeout=30):
@@ -60,7 +65,7 @@ def db_backend(request):
     if backend_name == "postgres":
         backend = start_container(
             image_name="postgres",
-            image_tag="17.6",
+            image_tag=get_pg_version_from_file(),
             dict_env_variables={
                 "POSTGRES_USER": "pguser",
                 "POSTGRES_PASSWORD": "pgpass",

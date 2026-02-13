@@ -234,6 +234,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       
+      - name: Ensure Postgres Server version and pgdump version match
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-$(cat PG_VERSION)
+          echo "/usr/lib/postgresql/$(cat PG_VERSION)/bin" >> $GITHUB_PATH
+
       - name: Run Pytest
         shell: bash
         run: |
