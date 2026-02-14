@@ -32,5 +32,3 @@ include-files = ["swellow/bin/*"]
 # Fetch project version from file VERSION
 [tool.hatch.version]
 path = "VERSION"
-[tool.hatch.build.hooks.custom]
-path = "scripts/hatch_build.py"
