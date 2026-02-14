@@ -37,12 +37,7 @@ def start_container(
         ports=dict_ports,
     )
 
-    return Backend(container.stop)
-
-
-class Backend():
-    def __init__(self, callback: callable):
-        self.clean_up = callback
+    return container
 
 
 @pytest.fixture(
@@ -63,7 +58,7 @@ def db_backend(request):
     backend_name = request.param[0]
 
     if backend_name == "postgres":
-        backend = start_container(
+        container = start_container(
             image_name="postgres",
             image_tag=get_pg_version_from_file(),
             dict_env_variables={
@@ -73,16 +68,20 @@ def db_backend(request):
             },
             dict_ports={'5432/tcp': 5432}
         )
+        clean_up = container.stop
+
         time.sleep(5)
         conn_url = "postgresql://pguser:pgpass@localhost:5432/mydb"
 
     elif backend_name in ["spark-delta", "spark-iceberg"]:
-        backend = start_container(
+        container = start_container(
             image_name="franciscoabsampaio/spark-connect-server",
             image_tag=backend_name.split('-')[-1],
             dict_ports={'15002/tcp': 15002}
         )
-        wait_for_log(backend, message="Spark Connect server started at:")
+        clean_up = container.stop
+
+        wait_for_log(container, message="Spark Connect server started at:")
         conn_url = "sc://localhost:15002"
     
     elif backend_name.startswith('databricks'):
@@ -107,8 +106,6 @@ def db_backend(request):
                 target_version_id=0
             )
 
-        backend = Backend(clean_up)
-
     else:
         raise ValueError(f"Unknown backend {backend_name}")
 
@@ -119,4 +116,4 @@ def db_backend(request):
         'flag_no_transaction': request.param[1],
     }
 
-    backend.clean_up()
+    clean_up()

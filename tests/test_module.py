@@ -125,10 +125,21 @@ def test_snapshot(db_backend):
         assert "CREATE TABLE spark_catalog.bird_watch.flock" in snapshot_sql
     elif engine == "spark-iceberg":
         assert "CREATE TABLE local.bird_watch.flock" in snapshot_sql
+    elif engine == "databricks-delta":
+        assert "CREATE TABLE bird_watch.flock" in snapshot_sql
 
-    # TODO: Test if VIEWS are snapshotted.
-    # TODO: Test if system schemas are ignored.
+    if engine == "postgres":
+        assert "CREATE VIEW bird_watch.flock_summary" in snapshot_sql
+    elif engine == "spark-delta":
+        # Vanilla Spark with Delta doesn't support
+        # 'SHOW CREATE TABLE',
+        # and thus the view shouldn't exist in the snapshot.
+        assert "CREATE VIEW spark_catalog.bird_watch.flock_summary" not in snapshot_sql
+    elif engine == "spark-iceberg":
+        assert "CREATE VIEW local.bird_watch.flock_summary" in snapshot_sql
+    elif engine == "databricks-delta":
+        assert "CREATE VIEW bird_watch.flock_summary" in snapshot_sql
 
     # Clean up by destroying the snapshot.
     import shutil
-    shutil.rmtree(directory + "000003_snapshot")
+    shutil.rmtree(directory + "000004_snapshot")
