@@ -226,7 +226,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - uses: ./.github/actions/setup-postgres-client
+      - uses: ./.github/actions/install-postgres-client
 
       - name: Run Pytest
         shell: bash
@@ -277,8 +277,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - uses: ./.github/actions/setup-postgres-client
-      
+      - uses: ./.github/actions/install-postgres-client
+
       - name: Install and test from TestPyPI
         run: |
           pip install \
