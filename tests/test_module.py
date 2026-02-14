@@ -109,7 +109,7 @@ def test_snapshot(db_backend):
     )
 
     # Finally, verify the snapshot contents.
-    with open(f"{directory}000003_snapshot/up.sql", "r") as f:
+    with open(f"{directory}000004_snapshot/up.sql", "r") as f:
         snapshot_sql = f.read()
 
     if engine == "postgres":
