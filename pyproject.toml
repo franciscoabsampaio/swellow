@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "swellow"
-version = "0.2.0"
+dynamic = ["version"]
 description = "SQL-first table migrations."
 authors = [{ name = "Francisco A. B. Sampaio", email = "franciscoabsampaio@gmail.com" }]
 license = "MIT"
@@ -29,3 +29,8 @@ test = [
 [tool.hatch.build.targets.wheel]
 packages = ["swellow"]
 include-files = ["swellow/bin/*"]
+# Fetch project version from file VERSION
+[tool.hatch.version]
+path = "VERSION"
+[tool.hatch.build.hooks.custom]
+path = "scripts/hatch_build.py"
