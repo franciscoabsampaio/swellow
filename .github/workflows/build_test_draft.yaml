@@ -197,7 +197,7 @@ jobs:
         uses: actions/attest@v3
         with:
           subject-path: "release/*"
-          predicate-type: https://slsa.dev/provenance/v1
+          show-summary: true
 
   test-python-distributable:
     needs: [build-python-dist]
