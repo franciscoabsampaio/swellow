@@ -194,7 +194,7 @@ jobs:
           
       # Generate attestations for each artifact
       - name: Attest build artifacts
-        uses: actions/attest@v4
+        uses: actions/attest@v3
         with:
           subject-path: "release/*"
           predicate-type: https://slsa.dev/provenance/v1
