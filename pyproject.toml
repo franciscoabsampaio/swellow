@@ -32,3 +32,4 @@ include-files = ["swellow/bin/*"]
 # Fetch project version from file VERSION
 [tool.hatch.version]
 path = "VERSION"
+pattern = "(?P<version>\\S+)"

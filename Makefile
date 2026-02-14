@@ -1,4 +1,7 @@
+# Read PG_VERSION from the file
 PG_VERSION := $(shell cat PG_VERSION)
+# Use empty string if TEST is not set
+TEST ?=
 
 init:
 	git config core.hooksPath .githooks
@@ -12,9 +15,11 @@ build:
 	cp target/debug/swellow swellow/bin/swellow-linux-x86_64/swellow
 	. venv/bin/activate && pip install .
 
+# Run a specific test by setting TEST=<test>
+# Example: make test TEST=test_snapshot
 test:
 	cargo test
-	. venv/bin/activate && pytest -vs
+	. venv/bin/activate && pytest -vs tests/test_module.py$$( [ -n "$(TEST)" ] && echo "::$(TEST)" )
 
 pg:
 	docker run --name pg -e POSTGRES_USER=pguser -e POSTGRES_PASSWORD=pgpass -e POSTGRES_DB=mydb -p 5432:5432 -d postgres:$(PG_VERSION)
