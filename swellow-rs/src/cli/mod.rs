@@ -23,9 +23,9 @@ impl Engine {
     ) -> Result<db::EngineBackend, db::EngineError> {
         match self {
             Engine::Postgres => Ok(db::EngineBackend::Postgres(db::PostgresEngine::new(&conn_str))),
-            Engine::DatabricksDelta => Ok(db::EngineBackend::SparkDelta(db::SparkEngine::new(&conn_str, db::SparkCatalog::DatabricksDelta).await?)),
-            Engine::SparkDelta => Ok(db::EngineBackend::SparkDelta(db::SparkEngine::new(&conn_str, db::SparkCatalog::Delta).await?)),
-            Engine::SparkIceberg => Ok(db::EngineBackend::SparkIceberg(db::SparkEngine::new(&conn_str, db::SparkCatalog::Iceberg).await?)),
+            Engine::DatabricksDelta => Ok(db::EngineBackend::SparkDelta(db::SparkEngine::new(&conn_str, db::Catalog::DatabricksDelta).await?)),
+            Engine::SparkDelta => Ok(db::EngineBackend::SparkDelta(db::SparkEngine::new(&conn_str, db::Catalog::Delta).await?)),
+            Engine::SparkIceberg => Ok(db::EngineBackend::SparkIceberg(db::SparkEngine::new(&conn_str, db::Catalog::Iceberg).await?)),
         }
     }
 }

@@ -1,11 +1,13 @@
 mod arrow_utils;
+mod catalog;
 mod error;
 mod postgres;
 mod spark;
 mod sql_common;
+pub use catalog::Catalog;
 pub use error::{EngineError, EngineErrorKind};
 pub use postgres::PostgresEngine;
-pub use spark::{SparkEngine, SparkCatalog};
+pub use spark::SparkEngine;
 
 use crate::{cli, migration::MigrationDirection};
 

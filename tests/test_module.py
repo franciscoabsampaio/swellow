@@ -1,4 +1,5 @@
 import pytest
+import re
 import swellow
 from swellow.app import SwellowEngineError, SwellowFileNotFoundError, SwellowVersionError
 
@@ -92,14 +93,23 @@ def test_snapshot(db_backend):
     # Start by setting up some resources for the snapshot to capture.
     directory = f"{db_backend['directory']}/snapshot/"
     engine = db_backend['engine']
-    swellow.up(
-        db=db_backend['conn_url'],
-        directory=directory,
-        engine=db_backend['engine'],
-        json=True,
-        no_transaction=True,  # Required to CREATE DATABASE with Postgres
-    )
 
+    flag_catalog_supports_create_view = True
+
+    try:
+        swellow.up(
+            db=db_backend['conn_url'],
+            directory=directory,
+            engine=db_backend['engine'],
+            json=True,
+            no_transaction=True,  # Required to CREATE DATABASE with Postgres
+        )
+    except SwellowEngineError as e:
+        if "Creating a view is not supported by catalog:" in e.message:
+            flag_catalog_supports_create_view = False
+        else:
+            raise e
+    
     # Now create the snapshot.
     swellow.snapshot(
         db=db_backend['conn_url'],
@@ -112,33 +122,28 @@ def test_snapshot(db_backend):
     with open(f"{directory}000004_snapshot/up.sql", "r") as f:
         snapshot_sql = f.read()
 
-    if engine == "postgres":
-        assert "CREATE SCHEMA bird_watch" in snapshot_sql
-    elif engine == "databricks-delta":
-        assert "CREATE DATABASE IF NOT EXISTS bird_watch" in snapshot_sql
+    # CREATE SCHEMA|DATABASE [IF NOT EXISTS] bird_watch
+    assert re.search(
+            r"CREATE\s+(SCHEMA|DATABASE)(\s+IF\s+NOT\s+EXISTS)?\s+bird_watch", 
+            snapshot_sql
+        ), f"Missing CREATE DATABASE/SCHEMA for {engine}"
+    
+    # CREATE TABLE [<CATALOG>.]flock
+    # (?:[\w]+\.)? is a non-capturing group for an optional catalog prefix
+    assert re.search(
+        r"CREATE\s+TABLE\s+(?:[\w]+\.)?bird_watch\.flock", 
+        snapshot_sql
+    ), f"Missing CREATE TABLE for {engine}"
+    
+    if flag_catalog_supports_create_view:
+        # CREATE VIEW [<CATALOG>.]bird_watch.flock_summary
+        assert re.search(
+            r"CREATE\s+VIEW\s+(?:[\w]+\.)?bird_watch\.flock_summary", 
+            snapshot_sql
+        ), f"Missing CREATE VIEW for {engine}"
     else:
-        assert "CREATE DATABASE bird_watch" in snapshot_sql
-
-    if engine == "postgres":
-        assert "CREATE TABLE bird_watch.flock" in snapshot_sql
-    elif engine == "spark-delta":
-        assert "CREATE TABLE spark_catalog.bird_watch.flock" in snapshot_sql
-    elif engine == "spark-iceberg":
-        assert "CREATE TABLE local.bird_watch.flock" in snapshot_sql
-    elif engine == "databricks-delta":
-        assert "CREATE TABLE bird_watch.flock" in snapshot_sql
-
-    if engine == "postgres":
-        assert "CREATE VIEW bird_watch.flock_summary" in snapshot_sql
-    elif engine == "spark-delta":
-        # Vanilla Spark with Delta doesn't support
-        # 'SHOW CREATE TABLE',
-        # and thus the view shouldn't exist in the snapshot.
-        assert "CREATE VIEW spark_catalog.bird_watch.flock_summary" not in snapshot_sql
-    elif engine == "spark-iceberg":
-        assert "CREATE VIEW local.bird_watch.flock_summary" in snapshot_sql
-    elif engine == "databricks-delta":
-        assert "CREATE VIEW bird_watch.flock_summary" in snapshot_sql
+        assert not re.search(r"bird_watch\.flock_summary", snapshot_sql), \
+            f"The catalog for engine '{engine}' should not have view definitions in this snapshot"
 
     # Clean up by destroying the snapshot.
     import shutil

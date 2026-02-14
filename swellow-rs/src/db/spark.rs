@@ -1,4 +1,4 @@
-use crate::db::{DbEngine, EngineError, error::EngineErrorKind, sql_common};
+use crate::db::{Catalog, DbEngine, EngineError, error::EngineErrorKind, sql_common};
 use crate::db::arrow_utils::{ get_column, get_column_by_name, get_first_string };
 use arrow;
 use arrow::array::{
@@ -53,24 +53,15 @@ fn build_schema_string(batch: &RecordBatch) -> Result<String, EngineError> {
 }
 
 
-/// Catalog type for ODBC engines
-#[derive(Clone, Copy)]
-pub enum SparkCatalog {
-    DatabricksDelta,
-    Delta,
-    Iceberg,
-}
-
-
 /// The Spark Engine uses a Spark Connect client
 /// to run queries against a data catalog.
 pub struct SparkEngine {
-    catalog: SparkCatalog,
+    catalog: Catalog,
     session: spark::SparkSession,
 }
 
 impl SparkEngine {
-    pub async fn new(conn_str: &str, catalog: SparkCatalog) -> Result<Self, EngineError> {
+    pub async fn new(conn_str: &str, catalog: Catalog) -> Result<Self, EngineError> {
         return Ok(SparkEngine {
             catalog: catalog,
             session: spark::SparkSessionBuilder::new(conn_str).build().await?
@@ -79,8 +70,8 @@ impl SparkEngine {
 
     fn using_clause(&self) -> &str {
         match self.catalog {
-            SparkCatalog::Delta | SparkCatalog::DatabricksDelta => "delta",
-            SparkCatalog::Iceberg => "iceberg",
+            Catalog::Delta | Catalog::DatabricksDelta => "delta",
+            Catalog::Iceberg => "iceberg",
         }
     }
 
@@ -116,7 +107,7 @@ impl SparkEngine {
         // ---------------------------------------
         // 0. Fetch DESCRIBE TABLE and DESCRIBE DETAIL info from Spark
         let describe_table_batch = &self.sql(
-            &format!("DESCRIBE TABLE {db}.{table}")
+            &format!("DESCRIBE EXTENDED {db}.{table}")
         ).await?[0];
         let describe_detail_batch = &self.sql(
             &format!("DESCRIBE DETAIL {db}.{table}")
@@ -390,13 +381,7 @@ impl DbEngine for SparkEngine {
         let mut snapshot_string: String = String::new();
 
         // 1: Fetch all relevant tables and their types in one go
-        let batches = self.sql("
-            SELECT table_schema, table_name, table_type 
-            FROM information_schema.tables 
-            WHERE table_schema NOT IN ('information_schema', 'sys')
-            ORDER BY table_schema, table_name
-        ").await?;
-
+        let batches = self.sql(self.catalog.show_tables_query()).await?;
         // Keep track of current schema.
         // Since we're ORDERing BY the schema,
         // we go over each schema and 
@@ -404,68 +389,43 @@ impl DbEngine for SparkEngine {
 
         // 2: Iterate over every batch
         for batch in batches {
-            // Extract columns
-            let column_db = get_column_by_name::<StringArray>(
-                &batch, "table_schema"
-            )?;
-            let column_table = get_column_by_name::<StringArray>(
-                &batch, "table_name"
-            )?;
-            let column_table_type = get_column_by_name::<StringArray>(
-                &batch, "table_type"
-            )?;
+            // 3: Get list of tables from batch
+            let tables = self.catalog.map_table_batch(&batch)?;
 
-            // 3: Iterate over rows in batch
-            for row in 0..batch.num_rows() {
-                // Skip if any value is null, since .value() panics
-                if column_db.is_null(row)
-                    || column_table.is_null(row)
-                    || column_table_type.is_null(row)
-                {
-                    continue;
-                }
-
-                let db = column_db.value(row);
-                let table = column_table.value(row);
-                let table_type = column_table_type.value(row);
+            for table_info in tables {
+                let db = &table_info.schema;
+                let table = &table_info.name;
+                let table_type = &table_info.table_type;
 
                 // CREATE DATABASE if it's the first time we find it in the list
-                if db != current_db {
+                if db != &current_db {
                     snapshot_string.push_str(&format!("CREATE DATABASE IF NOT EXISTS {db};\n\n"));
-                    current_db = db.to_string();
+                    current_db = db.clone();
                 }
 
                 // 5. Generate Table/View Creation Statement
                 // a) Try SHOW CREATE TABLE first
-                let show_create_result = self.fetch_column_of_strings(
+                let stmt = match self.fetch_column_of_strings(
                     &format!("SHOW CREATE TABLE {db}.{table}"),
                     0
-                ).await;
-
-                let stmt = match show_create_result {
+                ).await {
                     Ok(cols) if !cols.is_empty() => cols[0].clone(),
                     Ok(_) => return Err(EngineError {
                         kind: EngineErrorKind::InvalidSchema {
-                            stderr: format!(
-                                "'SHOW CREATE TABLE {db}.{table}' returned an empty result"
-                            ),
+                            stderr: format!("'SHOW CREATE TABLE {db}.{table}' returned empty"),
                         },
                     }),
                     // b) DatabricksDelta and SparkIceberg support SHOW CREATE TABLE for views,
                     // so it shouldn't have failed.
                     Err(err) if matches!(
-                        self.catalog, SparkCatalog::DatabricksDelta | SparkCatalog::Iceberg
-                    ) => {
-                        return Err(err);
-                    },
+                        self.catalog, Catalog::DatabricksDelta | Catalog::Iceberg
+                    ) => return Err(err),
                     // c) If it is a VIEW, skip,
                     // because the CREATE statement cannot be faithfully generated.
-                    Err(_) if table_type.contains("VIEW") => {
-                        continue;
-                    },
-                    // d) If it is a TABLE and the catalog isn't Databricks,
+                    Err(_) if table_type.contains("VIEW") => continue,
+                    // d) If it is NOT a VIEW and the catalog isn't Databricks,
                     // manually generate the table statement.
-                    Err(_) => self.generate_create_table_statement(&db, &table).await?,
+                    Err(_) => self.generate_create_table_statement(db, table).await?,
                 };
 
                 snapshot_string.push_str(&format!("{stmt};\n\n"));
