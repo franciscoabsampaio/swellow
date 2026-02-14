@@ -2,7 +2,7 @@ PG_VERSION := $(shell cat PG_VERSION)
 
 init:
 	git config core.hooksPath .githooks
-	chmod +x .githooks/pre-commit
+	chmod +x .githooks/*
 
 build:
 	cargo build
