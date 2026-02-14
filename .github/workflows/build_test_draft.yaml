@@ -194,9 +194,9 @@ jobs:
           
       # Generate attestations for each artifact
       - name: Attest build artifacts
-        uses: actions/attest@v3
+        uses: actions/attest-build-provenance@v3
         with:
-          subject-path: "release/*"
+          subject-path: release/*
           show-summary: true
 
   test-python-distributable:
