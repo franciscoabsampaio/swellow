@@ -195,17 +195,10 @@ jobs:
           
       # Generate attestations for each artifact
       - name: Attest build artifacts
-        uses: github/attest@v1
+        uses: github/attest@v4
         with:
           subject-path: "release/*"
           predicate-type: https://slsa.dev/provenance/v1
-          predicate: |
-            {
-              "buildType": "https://github.com/actions/build",
-              "builder": "github-actions",
-              "source": "${{ github.repository }}",
-              "version": "${{ needs.tag-version.outputs.version }}"
-            }
 
   test-python-distributable:
     needs: [build-python-dist]
