@@ -85,12 +85,6 @@ jobs:
           fileName: "${{ env.PROJECT_NAME }}-${{ needs.get-version.outputs.version }}*"
           out-file-path: "release-assets/"
 
-      - name: Debug workspace
-        run: |
-          echo "Workspace: $GITHUB_WORKSPACE"
-          pwd
-          ls -R
-
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
