@@ -5,7 +5,7 @@
 [![Crates.io](https://img.shields.io/crates/v/swellow.svg)](https://crates.io/crates/swellow)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-![Take flight with `swellow`!](https://raw.githubusercontent.com/franciscoabsampaio/swellow/main/docs/banner_16_9.png)
+![Take flight with `swellow`!](https://raw.githubusercontent.com/franciscoabsampaio/swellow/main/docs/image.jpg)
 
 `swellow` is the simple, SQL-first tool for managing table migrations, written in Rust.
 
