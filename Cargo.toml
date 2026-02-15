@@ -6,8 +6,14 @@ resolver = "3"
 
 [workspace.package]
 authors = ["Francisco A. B. Sampaio <franciscoabsampaio@gmail.com>"]
+categories = ["command-line-utilities", "database"]
+description = "SQL-first migration CLI"
+documentation = "https://docs.rs/swellow"
 edition = "2024"
+homepage = "https://github.com/franciscoabsampaio/swellow"
+keywords = ["migration", "sql", "postgres", "iceberg", "databricks"]
 license = "MIT"
+readme = "README.md"
 repository = "https://github.com/franciscoabsampaio/swellow"
 version = "0.2.0"
 

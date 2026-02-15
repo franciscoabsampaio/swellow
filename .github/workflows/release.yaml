@@ -48,7 +48,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
   promote-release:
-    name: Promote Draft Release and Publish to PyPI
+    name: Promote Draft Release, Publish Crate and Publish to PyPI
     needs: get-version
     runs-on: ubuntu-latest
     environment:
