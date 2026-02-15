@@ -71,26 +71,12 @@ jobs:
         with:
           ref: "v${{ needs.get-version.outputs.version }}"
       
-      # Publish Rust crate
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Publish crate
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          set -e
-
-          META=$(cargo metadata --no-deps --format-version 1)
-          CRATE_NAME=$(echo "$META" | jq -r '.packages[0].name')
-          VERSION=$(echo "$META" | jq -r '.packages[0].version')
-
-          echo "Checking if $CRATE_NAME@$VERSION already exists"
-
-          if curl -sf https://crates.io/api/v1/crates/$CRATE_NAME/$VERSION > /dev/null; then
-            echo "Already published."
-          else
-            cargo publish
-          fi
+      - name: Publish Rust crate if the version does not exist
+        uses: franciscoabsampaio/cargo-publish@main
+        with:
+          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          crate-name: ${{ env.PROJECT_NAME }}
+          crate-version: ${{ needs.get-version.outputs.version }}
 
       - name: Download release assets
         uses: robinraju/release-downloader@v1.9
