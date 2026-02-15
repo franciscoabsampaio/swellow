@@ -4,9 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "swellow"
-dynamic = ["version"]
-description = "SQL-first table migrations."
 authors = [{ name = "Francisco A. B. Sampaio", email = "franciscoabsampaio@gmail.com" }]
+description = "SQL-first table migrations."
+dynamic = ["version"]
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.9"
