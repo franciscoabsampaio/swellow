@@ -6,13 +6,15 @@
 [![Docs.rs](https://docs.rs/swellow/badge.svg)](https://docs.rs/swellow)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-![Take flight with `swellow`!](./docs/banner_16_9.png)
+![Take flight with `swellow`!](https://github.com/franciscoabsampaio/swellow/blob/main/docs/banner_16_9.png)
 
 `swellow` is the simple, SQL-first tool for managing table migrations, written in Rust.
 
+## [Changelog](https://github.com/franciscoabsampaio/swellow/blob/main/CHANGELOG.md)
+
 ## Built For Your Data Flock
 
-![The data flock.](docs/data_flock.png)
+![The data flock.](https://github.com/franciscoabsampaio/swellow/blob/main/docs/data_flock.png)
 
 ## Why Swellow?
 
