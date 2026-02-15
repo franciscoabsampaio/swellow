@@ -66,28 +66,48 @@ jobs:
           draft: false
           make_latest: true
 
+      - name: Checkout version
+        uses: actions/checkout@v4
+        with:
+          ref: "v${{ needs.get-version.outputs.version }}"
+      
+      # Publish Rust crate
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Publish crate
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -e
+
+          META=$(cargo metadata --no-deps --format-version 1)
+          CRATE_NAME=$(echo "$META" | jq -r '.packages[0].name')
+          VERSION=$(echo "$META" | jq -r '.packages[0].version')
+
+          echo "Checking if $CRATE_NAME@$VERSION already exists"
+
+          if curl -sf https://crates.io/api/v1/crates/$CRATE_NAME/$VERSION > /dev/null; then
+            echo "Already published."
+          else
+            cargo publish
+          fi
+
       - name: Download release assets
         uses: robinraju/release-downloader@v1.9
         with:
           tag: "v${{ needs.get-version.outputs.version }}"
           fileName: "${{ env.PROJECT_NAME }}-${{ needs.get-version.outputs.version }}*"
           out-file-path: "release-assets/"
-      
-      # Publish Rust crate
-      - name: Checkout version
-        uses: actions/checkout@v4
-        with:
-          ref: "v${{ needs.get-version.outputs.version }}"
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Publish crate
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish
+
+      - name: Debug workspace
+        run: |
+          echo "Workspace: $GITHUB_WORKSPACE"
+          pwd
+          ls -R
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: release-assets/
+          packages-dir: ${{ github.workspace }}/release-assets/
           skip-existing: true  # Don't fail if the version already exists
           verbose: true
