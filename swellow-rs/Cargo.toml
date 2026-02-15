@@ -1,6 +1,7 @@
 [package]
 name = "swellow"
 version.workspace = true
+description.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
