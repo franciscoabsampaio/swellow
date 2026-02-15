@@ -1,1 +1,0 @@
-ALTER TABLE flock DROP COLUMN twigs_collected;

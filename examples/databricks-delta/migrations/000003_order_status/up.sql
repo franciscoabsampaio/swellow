@@ -1,0 +1,5 @@
+ALTER TABLE orders
+ADD COLUMN status STRING;
+
+ALTER TABLE orders
+ALTER COLUMN status SET DEFAULT 'pending';

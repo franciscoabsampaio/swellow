@@ -58,7 +58,7 @@ jobs:
       contents: write  # needed to create releases
       id-token: write
     steps:
-      - name: Create draft release
+      - name: Promote draft release (set 'draft' to false)
         uses: softprops/action-gh-release@v2
         with:
           name: "${{ env.PROJECT_NAME }} v${{ needs.get-version.outputs.version }}"
@@ -72,6 +72,18 @@ jobs:
           tag: "v${{ needs.get-version.outputs.version }}"
           fileName: "${{ env.PROJECT_NAME }}-${{ needs.get-version.outputs.version }}*"
           out-file-path: "release-assets/"
+      
+      # Publish Rust crate
+      - name: Checkout version
+        uses: actions/checkout@v4
+        with:
+          ref: "v${{ needs.get-version.outputs.version }}"
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Publish crate
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

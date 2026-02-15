@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "swellow"
-version = "0.1.2"
+dynamic = ["version"]
 description = "SQL-first table migrations."
 authors = [{ name = "Francisco A. B. Sampaio", email = "franciscoabsampaio@gmail.com" }]
 license = "MIT"
@@ -21,11 +21,15 @@ swellow = "swellow.cli:main"
 
 [project.optional-dependencies]
 test = [
+    "docker>=7.1.0",
     "pytest>=8.4.2",
-    "testcontainers>=4.13.0",
 ]
 
 # Hatch (build tool)
 [tool.hatch.build.targets.wheel]
-packages = ["src/swellow"]
-include-files = ["src/swellow/bin/*"]
+packages = ["swellow"]
+include-files = ["swellow/bin/*"]
+# Fetch project version from file VERSION
+[tool.hatch.version]
+path = "VERSION"
+pattern = "(?P<version>\\S+)"

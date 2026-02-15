@@ -23,11 +23,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Extract version from pyproject.toml
+      - name: Extract version from VERSION
         id: get_version
         run: |
-          VERSION=$(grep -Po '(?<=^version = ")[^"]*' pyproject.toml)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
 
       - name: Create and push tag
         run: |
@@ -73,7 +72,7 @@ jobs:
           key: rust-binary-${{ env.PROJECT_NAME }}-${{ env.TARGET }}-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
 
       # Build binary if cache is missing
-      - name: Build Rust binary
+      - name: Set up Rust
         if: steps.cache-rust.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -141,11 +140,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: ${{ env.PROJECT_NAME }}-*
-          path: src/${{ env.PROJECT_NAME }}/bin/
+          path: ${{ env.PROJECT_NAME }}/bin/
       - name: Make Rust binaries executable
         shell: bash
         run: |
-          chmod +x src/${{ env.PROJECT_NAME }}/bin/*/${{ env.PROJECT_NAME }}*
+          chmod +x ${{ env.PROJECT_NAME }}/bin/*/${{ env.PROJECT_NAME }}*
 
       - name: Build package
         shell: bash
@@ -160,15 +159,15 @@ jobs:
           name: release-dist-${{ env.PROJECT_NAME }}
           path: dist/
 
-  compute-hashes:
+  draft-release-and-attest:
     needs: [tag-version, build-python-dist]
     permissions:
       actions: read
       id-token: write
       contents: write
+      attestations: write
     runs-on: ubuntu-latest
-    outputs:
-      hash_b64: ${{ steps.hash.outputs.hash_b64 }}
+    
     steps:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -176,18 +175,6 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: release/
-
-      # 🔑 Compute SHA256 hashes and encode in base64 for SLSA workflow
-      - name: Compute hashes
-        id: hash
-        run: |
-          set -euo pipefail
-          for f in release/*; do
-            sha=$(sha256sum "$f" | cut -d ' ' -f1)
-            echo "${sha}  $f" >> hashes.txt
-          done
-          b64=$(base64 -w0 hashes.txt)
-          echo "hash_b64=$b64" >> $GITHUB_OUTPUT
 
       # Create draft release with distributable and Rust binaries
       - name: Create draft release
@@ -198,25 +185,19 @@ jobs:
           body: |
             Included in this release:
             
-            - Binaries for multiple platforms (`swellow_<platform>`).
+            - Binaries for multiple platforms (`release-binary-<platform>`).
             - Source code archives.
-            - Provenance.
+            - Build attestations (GitHub native).
           draft: true
           files: release/*
           overwrite_files: true
-
-  provenance:
-    needs: [tag-version, compute-hashes]
-    permissions:
-      actions: read
-      id-token: write
-      contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
-    with:
-      base64-subjects: ${{ needs.compute-hashes.outputs.hash_b64 }}
-      upload-assets: true
-      upload-tag-name: v${{ needs.tag-version.outputs.version }}
-      draft-release: true
+          
+      # Generate attestations for each artifact
+      - name: Attest build artifacts
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: release/*
+          show-summary: true
 
   test-python-distributable:
     needs: [build-python-dist]
@@ -244,7 +225,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      
+
+      - uses: ./.github/actions/install-postgres-client
+
       - name: Run Pytest
         shell: bash
         run: |
@@ -293,6 +276,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
+      - uses: ./.github/actions/install-postgres-client
+
       - name: Install and test from TestPyPI
         run: |
           pip install \
