@@ -1,11 +1,16 @@
 [package]
 name = "swellow"
-version.workspace = true
-description.workspace = true
 authors.workspace = true
+categories.workspace = true
+description.workspace = true
+documentation.workspace = true
 edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
 license.workspace = true
+readme.workspace = true
 repository.workspace = true
+version.workspace = true
 
 [[bin]]
 name = "swellow"
